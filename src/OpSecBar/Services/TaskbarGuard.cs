@@ -51,19 +51,24 @@ public static class TaskbarGuard
     /// esecuzione ne esiste una nostra (creata da ManagedShell per il tray) e, con la taskbar di Explorer spinta in
     /// fondo, è quella a ricevere la richiesta: lo stato di Explorer non verrebbe né letto né modificato.
     /// Per la durata della chiamata si porta quindi la taskbar di Explorer davanti alla nostra.
+    /// La nostra finta Shell_TrayWnd è TOPMOST mentre quella di Explorer, una volta nascosta, non lo è più: HWND_TOP
+    /// la porterebbe solo in cima alle finestre normali, sempre sotto la nostra. Serve quindi HWND_TOPMOST.
     /// </summary>
     private static T SendToExplorer<T>(Func<IntPtr, T> send)
     {
         IntPtr tray = FindPrimaryTaskbar();
         if (tray == IntPtr.Zero) return send(IntPtr.Zero);
-        const int HWND_TOP = 0, HWND_BOTTOM = 1;
-        Native.SetWindowPos(tray, (IntPtr)HWND_TOP, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        const int HWND_TOPMOST = -1, HWND_NOTOPMOST = -2, HWND_BOTTOM = 1;
+        const uint flags = Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE;
+        bool wasTopmost = (Native.GetWindowLong(tray, Native.GWL_EXSTYLE) & Native.WS_EX_TOPMOST) != 0;
+        Native.SetWindowPos(tray, (IntPtr)HWND_TOPMOST, 0, 0, 0, 0, flags);
         try { return send(tray); }
         finally
         {
+            if (!wasTopmost) Native.SetWindowPos(tray, (IntPtr)HWND_NOTOPMOST, 0, 0, 0, 0, flags);
             // Se Explorer la teneva nascosta in fondo, ce la si rimette (ManagedShell fa lo stesso).
             if (!Native.IsWindowVisible(tray))
-                Native.SetWindowPos(tray, (IntPtr)HWND_BOTTOM, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+                Native.SetWindowPos(tray, (IntPtr)HWND_BOTTOM, 0, 0, 0, 0, flags);
         }
     }
 
@@ -97,6 +102,43 @@ public static class TaskbarGuard
             if ((state & 0x1) == 0) SetTaskbarState(state | 0x1);
         }
         catch (Exception ex) { Log.Error("ForceAutoHide fallito", ex); }
+    }
+
+    /// <summary>
+    /// Spessore (px fisici) della taskbar di Explorer ancorata al lato <paramref name="edge"/> (ABE_*: 0 sinistra,
+    /// 1 alto, 2 destra, 3 basso) dello schermo indicato; 0 se su quel lato non ce n'è una.
+    /// Anche nascosta, la taskbar resta registrata come AppBar e Windows ne tiene riservato lo spazio.
+    /// </summary>
+    internal static int DockedTaskbarThickness(Native.RECT screen, int edge)
+    {
+        int best = 0;
+        try
+        {
+            foreach (IntPtr h in FindExplorerTaskbars())
+            {
+                if (!Native.GetWindowRect(h, out Native.RECT r) || r.Width <= 0 || r.Height <= 0) continue;
+                int cx = r.Left + r.Width / 2, cy = r.Top + r.Height / 2;
+                if (cx < screen.Left || cx >= screen.Right || cy < screen.Top || cy >= screen.Bottom) continue;
+
+                bool vertical = edge is 0 or 2;
+                bool spansSide = vertical
+                    ? r.Top <= screen.Top + 1 && r.Bottom >= screen.Bottom - 1
+                    : r.Left <= screen.Left + 1 && r.Right >= screen.Right - 1;
+                if (!spansSide) continue;
+
+                int t = edge switch
+                {
+                    0 => r.Left <= screen.Left + 1 ? r.Right - screen.Left : 0,
+                    1 => r.Top <= screen.Top + 1 ? r.Bottom - screen.Top : 0,
+                    2 => r.Right >= screen.Right - 1 ? screen.Right - r.Left : 0,
+                    _ => r.Bottom >= screen.Bottom - 1 ? screen.Bottom - r.Top : 0
+                };
+                int max = (vertical ? screen.Width : screen.Height) / 2;
+                if (t > 0 && t < max) best = Math.Max(best, t);
+            }
+        }
+        catch (Exception ex) { Log.Error("DockedTaskbarThickness", ex); }
+        return best;
     }
 
     /// <summary>

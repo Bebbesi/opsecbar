@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +10,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ManagedShell.AppBar;
 using ManagedShell.Common.Helpers;
+using ManagedShell.Interop;
 using ManagedShell.WindowsTasks;
 using OpSecBar.Controls;
 using OpSecBar.Core;
@@ -331,7 +334,115 @@ public partial class TaskbarWindow : AppBarWindow
     protected override void OnSourceInitialized(object sender, EventArgs e)
     {
         base.OnSourceInitialized(sender, e);
+        if (CoversHiddenTaskbar) UpdatePosition(); // la registrazione di ManagedShell ci ha messo dopo la taskbar nascosta
         UpdateShape();
+    }
+
+    // ---- Taskbar di Windows nascosta ma ancora ancorata ----------------------------------------
+    // Explorer non accetta più ABM_SETSTATE (auto-hide) e la sua taskbar, pur nascosta, resta registrata come AppBar:
+    // riserva il suo lato (es. 53 px a sinistra) e ABM_QUERYPOS/SETPOS spingono OpSecBar oltre, lasciando una fascia
+    // vuota tra il bordo dello schermo e la barra. Soluzione: la finestra si disegna a filo del bordo, sopra la
+    // fascia della taskbar nascosta, e presso Windows si registra solo lo spessore che eccede quella fascia.
+    // L'area di lavoro risultante coincide così esattamente con il bordo interno della barra.
+
+    private static readonly FieldInfo? AppBarMessageIdField =
+        typeof(AppBarWindow).GetField("AppBarMessageId", BindingFlags.Instance | BindingFlags.NonPublic);
+    private int _appBarMessageId = -1;
+
+    private bool CoversHiddenTaskbar =>
+        _s.HideWindowsTaskbar && AppBarMode == AppBarMode.Normal && !DeferWorkArea && Handle != IntPtr.Zero;
+
+    public override bool UpdatePosition()
+    {
+        if (CoversHiddenTaskbar)
+        {
+            try
+            {
+                if (TryPositionOverHiddenTaskbar(out bool moved)) return moved;
+            }
+            catch (Exception ex) { Log.Error("Posizionamento sopra la taskbar nascosta", ex); }
+        }
+        return base.UpdatePosition();
+    }
+
+    private bool TryPositionOverHiddenTaskbar(out bool moved)
+    {
+        moved = false;
+        NativeMethods.Rect desired = GetDesiredRect(); // a filo del bordo, spessore pieno
+        int edge = (int)AppBarEdge;
+        bool vertical = AppBarEdge is AppBarEdge.Left or AppBarEdge.Right;
+        int thickness = vertical ? desired.Right - desired.Left : desired.Bottom - desired.Top;
+        var bounds = new Native.RECT
+        {
+            Left = (int)Screen.Bounds.Left, Top = (int)Screen.Bounds.Top,
+            Right = (int)Screen.Bounds.Right, Bottom = (int)Screen.Bounds.Bottom
+        };
+
+        int taskbar = TaskbarGuard.DockedTaskbarThickness(bounds, edge);
+        if (taskbar <= 0) return false;
+
+        // Di quanto Windows ci sposterebbe verso l'interno: se la taskbar non riserva spazio (es. auto-hide) è 0.
+        var abd = new Native.APPBARDATA
+        {
+            cbSize = Marshal.SizeOf<Native.APPBARDATA>(), hWnd = Handle, uEdge = (uint)edge, rc = ToNative(desired)
+        };
+        Native.SHAppBarMessage(Native.ABM_QUERYPOS, ref abd);
+        int pushed = AppBarEdge switch
+        {
+            AppBarEdge.Left => abd.rc.Left - desired.Left,
+            AppBarEdge.Right => desired.Right - abd.rc.Right,
+            AppBarEdge.Top => abd.rc.Top - desired.Top,
+            _ => desired.Bottom - abd.rc.Bottom
+        };
+        int covered = Math.Min(taskbar, pushed);
+        if (covered <= 0) return false;
+
+        // Si registra solo la parte che sporge oltre la fascia della taskbar nascosta.
+        int reserve = Math.Max(1, thickness - covered);
+        abd.rc = ToNative(desired);
+        Shrink(ref abd.rc, reserve);
+        Native.SHAppBarMessage(Native.ABM_QUERYPOS, ref abd);
+        Shrink(ref abd.rc, reserve);
+        Native.SHAppBarMessage(Native.ABM_SETPOS, ref abd);
+
+        // La finestra parte dal bordo interno dell'area riservata e si estende per tutto lo spessore verso lo schermo.
+        Native.RECT r = abd.rc;
+        var win = new NativeMethods.Rect { Left = r.Left, Top = r.Top, Right = r.Right, Bottom = r.Bottom };
+        switch (AppBarEdge)
+        {
+            case AppBarEdge.Left:
+                win.Left = Math.Max(bounds.Left, r.Right - thickness); win.Right = win.Left + thickness; break;
+            case AppBarEdge.Right:
+                win.Right = Math.Min(bounds.Right, r.Left + thickness); win.Left = win.Right - thickness; break;
+            case AppBarEdge.Top:
+                win.Top = Math.Max(bounds.Top, r.Bottom - thickness); win.Bottom = win.Top + thickness; break;
+            default:
+                win.Bottom = Math.Min(bounds.Bottom, r.Top + thickness); win.Top = win.Bottom - thickness; break;
+        }
+        moved = SetWindowPosition(win);
+        return true;
+    }
+
+    /// <summary>Riduce il rettangolo allo spessore indicato mantenendo il lato verso il bordo dello schermo.</summary>
+    private void Shrink(ref Native.RECT rc, int size)
+    {
+        switch (AppBarEdge)
+        {
+            case AppBarEdge.Left: rc.Right = rc.Left + size; break;
+            case AppBarEdge.Right: rc.Left = rc.Right - size; break;
+            case AppBarEdge.Top: rc.Bottom = rc.Top + size; break;
+            default: rc.Top = rc.Bottom - size; break;
+        }
+    }
+
+    private static Native.RECT ToNative(NativeMethods.Rect r) =>
+        new() { Left = r.Left, Top = r.Top, Right = r.Right, Bottom = r.Bottom };
+
+    private bool IsAppBarPosChanged(int msg, IntPtr wParam)
+    {
+        if (wParam.ToInt64() != Native.ABN_POSCHANGED) return false;
+        if (_appBarMessageId <= 0 && AppBarMessageIdField?.GetValue(this) is int id) _appBarMessageId = id;
+        return _appBarMessageId > 0 && msg == _appBarMessageId;
     }
 
     protected override void SetScreenProperties(ScreenSetupReason reason)
@@ -362,6 +473,14 @@ public partial class TaskbarWindow : AppBarWindow
 
     protected override IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // La base risponderebbe con ABSetPos, rimettendo la barra dopo la taskbar nascosta.
+        if (CoversHiddenTaskbar && IsAppBarPosChanged(msg, wParam))
+        {
+            try { UpdatePosition(); } catch (Exception ex) { Log.Error("UpdatePosition", ex); }
+            handled = true;
+            return IntPtr.Zero;
+        }
+
         IntPtr result = base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         if (msg == Native.WM_WINDOWPOSCHANGED)
         {

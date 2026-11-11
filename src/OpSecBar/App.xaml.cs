@@ -226,12 +226,20 @@ public partial class App : Application
         {
             TaskbarGuard.PrepareHide();
             Shell.ExplorerHelper.HideExplorerTaskbar = true;
-            TaskbarGuard.ForceAutoHide(); // libera lo spazio che la taskbar nascosta continuerebbe a riservare
+            // Tentativo di liberare lo spazio che la taskbar nascosta continuerebbe a riservare. Le build recenti di
+            // Windows 11 lo ignorano: in quel caso ci pensa TaskbarWindow, disegnandosi sopra la fascia riservata.
+            TaskbarGuard.ForceAutoHide();
         }
         else
         {
             Shell.ExplorerHelper.HideExplorerTaskbar = false;
             TaskbarGuard.RestoreWindowsTaskbar();
+        }
+
+        // Le barre già aperte si riposizionano: sopra la fascia della taskbar nascosta, oppure di nuovo accanto a quella visibile.
+        foreach (TaskbarWindow bar in _bars)
+        {
+            try { bar.UpdatePosition(); } catch (Exception ex) { Log.Error("UpdatePosition", ex); }
         }
     }
 

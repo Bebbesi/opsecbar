@@ -10,7 +10,10 @@ internal static class Native
     public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr childAfter, string? className, string? windowName);
 
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLong(IntPtr hWnd, int index);
+    public const int GWL_EXSTYLE = -20, WS_EX_TOPMOST = 0x8;
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool redraw);
@@ -91,7 +94,8 @@ internal static class Native
     }
 
     [DllImport("shell32.dll")] public static extern UIntPtr SHAppBarMessage(uint msg, ref APPBARDATA data);
-    public const uint ABM_GETSTATE = 0x4, ABM_SETSTATE = 0xA;
+    public const uint ABM_QUERYPOS = 0x2, ABM_SETPOS = 0x3, ABM_GETSTATE = 0x4, ABM_SETSTATE = 0xA;
+    public const int ABN_POSCHANGED = 0x1;
 
     // ---- Backdrop (blur / acrylic) ----------------------------------------------------------
     public enum AccentState { Disabled = 0, Gradient = 1, TransparentGradient = 2, BlurBehind = 3, AcrylicBlurBehind = 4 }
