@@ -226,6 +226,7 @@ public partial class App : Application
         {
             TaskbarGuard.PrepareHide();
             Shell.ExplorerHelper.HideExplorerTaskbar = true;
+            TaskbarGuard.ForceAutoHide(); // libera lo spazio che la taskbar nascosta continuerebbe a riservare
         }
         else
         {

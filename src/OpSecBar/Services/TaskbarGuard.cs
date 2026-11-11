@@ -46,19 +46,57 @@ public static class TaskbarGuard
         return IntPtr.Zero;
     }
 
-    private static int GetTaskbarState()
+    /// <summary>
+    /// SHAppBarMessage recapita il messaggio alla prima finestra "Shell_TrayWnd" in ordine Z. Mentre OpSecBar è in
+    /// esecuzione ne esiste una nostra (creata da ManagedShell per il tray) e, con la taskbar di Explorer spinta in
+    /// fondo, è quella a ricevere la richiesta: lo stato di Explorer non verrebbe né letto né modificato.
+    /// Per la durata della chiamata si porta quindi la taskbar di Explorer davanti alla nostra.
+    /// </summary>
+    private static T SendToExplorer<T>(Func<IntPtr, T> send)
     {
-        var abd = new Native.APPBARDATA { cbSize = Marshal.SizeOf<Native.APPBARDATA>(), hWnd = FindPrimaryTaskbar() };
-        return (int)Native.SHAppBarMessage(Native.ABM_GETSTATE, ref abd).ToUInt32();
+        IntPtr tray = FindPrimaryTaskbar();
+        if (tray == IntPtr.Zero) return send(IntPtr.Zero);
+        const int HWND_TOP = 0, HWND_BOTTOM = 1;
+        Native.SetWindowPos(tray, (IntPtr)HWND_TOP, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        try { return send(tray); }
+        finally
+        {
+            // Se Explorer la teneva nascosta in fondo, ce la si rimette (ManagedShell fa lo stesso).
+            if (!Native.IsWindowVisible(tray))
+                Native.SetWindowPos(tray, (IntPtr)HWND_BOTTOM, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        }
     }
 
-    private static void SetTaskbarState(int state)
+    private static int GetTaskbarState() => SendToExplorer(tray =>
+    {
+        var abd = new Native.APPBARDATA { cbSize = Marshal.SizeOf<Native.APPBARDATA>(), hWnd = tray };
+        return (int)Native.SHAppBarMessage(Native.ABM_GETSTATE, ref abd).ToUInt32();
+    });
+
+    private static void SetTaskbarState(int state) => SendToExplorer(tray =>
     {
         var abd = new Native.APPBARDATA
         {
-            cbSize = Marshal.SizeOf<Native.APPBARDATA>(), hWnd = FindPrimaryTaskbar(), lParam = (IntPtr)state
+            cbSize = Marshal.SizeOf<Native.APPBARDATA>(), hWnd = tray, lParam = (IntPtr)state
         };
         Native.SHAppBarMessage(Native.ABM_SETSTATE, ref abd);
+        return 0;
+    });
+
+    /// <summary>
+    /// Mette la taskbar di Explorer in auto-hide. Nascondere soltanto la finestra non basta: la taskbar resta
+    /// registrata come AppBar e continua a riservare il suo spazio (es. 48 px sul lato sinistro quando la taskbar di
+    /// Windows 11 è a sinistra), spingendo verso l'interno OpSecBar e lasciando una fascia vuota.
+    /// Da chiamare dopo <see cref="PrepareHide"/>, che salva lo stato originale per il ripristino.
+    /// </summary>
+    public static void ForceAutoHide()
+    {
+        try
+        {
+            int state = GetTaskbarState();
+            if ((state & 0x1) == 0) SetTaskbarState(state | 0x1);
+        }
+        catch (Exception ex) { Log.Error("ForceAutoHide fallito", ex); }
     }
 
     /// <summary>
