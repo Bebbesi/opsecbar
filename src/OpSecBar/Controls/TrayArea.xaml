@@ -1,0 +1,65 @@
+<UserControl x:Class="OpSecBar.Controls.TrayArea"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <!-- Un'icona dell'area di notifica: i click vengono inoltrati all'applicazione proprietaria -->
+        <DataTemplate x:Key="TrayIconTemplate">
+            <Border x:Name="Bd" Width="26" Height="26" Margin="1" CornerRadius="5" Background="Transparent"
+                    MouseEnter="Icon_MouseEnter" MouseLeave="Icon_MouseLeave" MouseMove="Icon_MouseMove"
+                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp">
+                <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="OverflowIconTemplate">
+            <Border x:Name="Bd" Width="34" Height="34" Margin="1" CornerRadius="7" Background="Transparent"
+                    MouseEnter="Icon_MouseEnter" MouseLeave="Icon_MouseLeave" MouseMove="Icon_MouseMove"
+                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp">
+                <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelHoverBrush}" />
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel x:Name="HostPanel" Orientation="Horizontal">
+        <Button x:Name="Chevron" Style="{StaticResource BarButton}" Padding="4,0" MinWidth="24" Click="Chevron_Click"
+                ToolTip="Show hidden icons">
+            <TextBlock x:Name="ChevronGlyph" Style="{StaticResource Glyph}" FontSize="10" Text="&#xE70D;" />
+        </Button>
+
+        <ItemsControl x:Name="PinnedItems" ItemTemplate="{StaticResource TrayIconTemplate}" VerticalAlignment="Center"
+                      HorizontalAlignment="Center" Focusable="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="{Binding Orientation, ElementName=HostPanel}" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <Popup x:Name="Overflow" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
+               PlacementTarget="{Binding ElementName=Chevron}" Placement="Bottom" Closed="Overflow_Closed" Opened="Overflow_Opened">
+            <Border Style="{StaticResource FlyoutBorder}" Padding="8">
+                <Grid>
+                    <ItemsControl x:Name="OverflowItems" ItemTemplate="{StaticResource OverflowIconTemplate}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel MaxWidth="180" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock x:Name="EmptyText" Text="No hidden icons" Foreground="{DynamicResource PanelFgDimBrush}"
+                               FontSize="12" Margin="10,6" Visibility="Collapsed" />
+                </Grid>
+            </Border>
+        </Popup>
+    </StackPanel>
+</UserControl>

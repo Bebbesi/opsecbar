@@ -1,0 +1,303 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Stili condivisi da barra, flyout e menu Start.
+         I pennelli (FgBrush, PanelBrush, AccentBrush...) sono pubblicati da ThemeService.ApplyResources. -->
+
+    <FontFamily x:Key="GlyphFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <Style x:Key="Glyph" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlyphFont}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+    </Style>
+
+    <!-- Pulsante della barra: trasparente, evidenziazione morbida al passaggio del mouse -->
+    <Style x:Key="BarButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Margin" Value="1,3" />
+        <Setter Property="MinWidth" Value="30" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Pulsante dentro un pannello (flyout, menu Start) -->
+    <Style x:Key="PanelButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelPressedBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Contenitore dei flyout -->
+    <Style x:Key="FlyoutBorder" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource PanelSolidBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Margin" Value="10" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.35" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Tooltip -->
+    <Style TargetType="ToolTip">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
+        <Setter Property="FontFamily" Value="{DynamicResource BarFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{DynamicResource PanelSolidBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                            BorderThickness="1" CornerRadius="6" Padding="9,5" Margin="4">
+                        <ContentPresenter MaxWidth="360">
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Menu contestuali -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
+        <Setter Property="FontFamily" Value="{DynamicResource BarFont}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{DynamicResource PanelSolidBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                            BorderThickness="1" CornerRadius="9" Padding="4" Margin="10" MinWidth="190">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.35" />
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="8,7,14,7" Margin="0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="26" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter ContentSource="Icon" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False" VerticalAlignment="Center">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        <Setter Property="MaxWidth" Value="320" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="8,4" Background="{DynamicResource PanelBorderBrush}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Barra di avanzamento del player (slider sottile) -->
+    <Style x:Key="SeekThumb" TargetType="Thumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Ellipse Width="12" Height="12" Fill="{DynamicResource PanelFgBrush}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SeekTrackButton" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent" Height="16">
+                        <Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SeekSlider" TargetType="Slider">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsMoveToPointEnabled" Value="True" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid Height="16" Background="Transparent">
+                        <Track x:Name="PART_Track">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource SeekTrackButton}"
+                                              Background="{DynamicResource AccentBrush}" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="Slider.IncreaseLarge" Style="{StaticResource SeekTrackButton}"
+                                              Background="{DynamicResource PanelPressedBrush}" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource SeekThumb}" />
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Scrollbar sottile -->
+    <Style x:Key="ThinScrollThumb" TargetType="Thumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border CornerRadius="3" Background="#66808080" Margin="2" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ScrollPageButton" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Track x:Name="PART_Track" IsDirectionReversed="True">
+                        <Track.DecreaseRepeatButton>
+                            <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollPageButton}" />
+                        </Track.DecreaseRepeatButton>
+                        <Track.IncreaseRepeatButton>
+                            <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollPageButton}" />
+                        </Track.IncreaseRepeatButton>
+                        <Track.Thumb>
+                            <Thumb Style="{StaticResource ThinScrollThumb}" />
+                        </Track.Thumb>
+                    </Track>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="Height" Value="10" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource ScrollPageButton}" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource ScrollPageButton}" />
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ThinScrollThumb}" />
+                                </Track.Thumb>
+                            </Track>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>
