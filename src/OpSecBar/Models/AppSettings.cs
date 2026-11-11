@@ -76,7 +76,7 @@ public class AppSettings : ObservableObject
     private bool _showMediaPlayer = true, _showMediaTitle = true, _showClock = true, _showDate = true, _showSeconds;
     private bool _clock24h = true, _showTray = true, _showQuickSettings = true, _showStartButton = true, _showSysInfo;
     private bool _showRunningApps = true, _showPinnedApps = true, _groupWindows = true;
-    private bool _autoStart, _hideWindowsTaskbar = true;
+    private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _useWinKey = true;
 
@@ -106,6 +106,8 @@ public class AppSettings : ObservableObject
     // Sistema
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool HideWindowsTaskbar { get => _hideWindowsTaskbar; set => Set(ref _hideWindowsTaskbar, value); }
+    /// <summary>All'avvio scarica e installa da sola le nuove release; se spento, le segnala soltanto.</summary>
+    public bool AutoUpdate { get => _autoUpdate; set => Set(ref _autoUpdate, value); }
 
     // Menu Start
     public double StartMenuWidth { get => _startMenuWidth; set => Set(ref _startMenuWidth, value); }

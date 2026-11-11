@@ -54,6 +54,15 @@ public static class ThemeService
             CornerRadius = 0, BarHeight = 40, Margin = 0, IconSize = 22, IconSpacing = 4, FontSize = 12.5,
             BorderThickness = 0, BorderColor = "#22000000"
         },
+        new()
+        {
+            // Stile "barra da tiling window manager": fondo scuro violaceo, cornice verde, accento viola, font monospazio.
+            Name = "Terminal", Backdrop = BackdropMode.Solid, BackgroundColor = "#1C1B26", Opacity = 1,
+            ForegroundColor = "#D9D6E6", AccentColor = "#9D7CF0", PanelColor = "#1C1B26", PanelOpacity = 1,
+            CornerRadius = 5, BarHeight = 40, Margin = 6, IconSize = 20, IconSpacing = 8,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 13,
+            BorderThickness = 2, BorderColor = "#5ED162"
+        },
     };
 
     // ---- Colori ---------------------------------------------------------------------------------

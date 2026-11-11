@@ -23,6 +23,28 @@ public partial class App : Application
     public MediaService Media { get; private set; } = null!;
     public SystemInfoService SysInfo { get; private set; } = null!;
     public AppCatalogService Catalog { get; } = new();
+    public UpdateService Updates { get; } = new();
+
+    /// <summary>Controlla l'ultima release su GitHub; con <paramref name="install"/> la scarica e la installa subito.</summary>
+    public async void CheckForUpdates(bool install)
+    {
+        try
+        {
+            if (await Updates.CheckAsync(install) && !_exiting) InstallUpdate();
+        }
+        catch (Exception ex) { Log.Error("Controllo aggiornamenti", ex); }
+    }
+
+    /// <summary>Scarica (se serve) e applica l'aggiornamento trovato: l'app si chiude e riparte nella nuova versione.</summary>
+    public async void InstallUpdate()
+    {
+        try
+        {
+            if (Updates.State == UpdateState.Available && !await Updates.DownloadAsync()) return;
+            if (Updates.ApplyAndRestart()) ExitApp();
+        }
+        catch (Exception ex) { Log.Error("Installazione aggiornamento", ex); }
+    }
 
     private readonly List<TaskbarWindow> _bars = new();
     private StartMenuWindow? _startMenu;
@@ -107,6 +129,16 @@ public partial class App : Application
             _ = Catalog.GetAppsAsync();
 
             if (e.Args.Contains("--settings")) ShowSettings();
+            if (e.Args.Contains("--updated")) Log.Info($"Aggiornato alla versione {Updates.CurrentVersion}");
+
+            // A ogni avvio, poco dopo che la barra è comparsa, si controlla se c'è una nuova release.
+            var updateCheck = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            updateCheck.Tick += (_, _) =>
+            {
+                updateCheck.Stop();
+                CheckForUpdates(Settings.AutoUpdate);
+            };
+            updateCheck.Start();
 
             // A regime la barra usa pochissima memoria: dopo l'avvio si restituiscono a Windows le pagine non più usate.
             var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };

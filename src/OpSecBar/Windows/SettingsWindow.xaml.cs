@@ -17,7 +17,7 @@ using OpSecBar.Services;
 namespace OpSecBar.Windows;
 
 /// <summary>
-/// Finestra Impostazioni, in stile Windows 11: segue il tema chiaro/scuro e il colore d'accento di sistema.
+/// Finestra Impostazioni, in stile Windows 11: i colori della finestra seguono il tema della barra (menu, testo, accento).
 /// Le pagine sono costruite da codice con pochi "mattoncini" (Section, Card, Row, Toggle, SliderCtl, ComboCtl...):
 /// per aggiungere un'opzione basta una riga nella pagina giusta. Ogni modifica è applicata subito e salvata da sola.
 /// </summary>
@@ -42,8 +42,13 @@ public partial class SettingsWindow : Window
         VersionText.Text = "Version " + (GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
 
         SourceInitialized += (_, _) => ApplyTitleBar();
-        SystemEvents.UserPreferenceChanged += OnSystemPreferenceChanged;
-        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnSystemPreferenceChanged;
+        _app.SettingsService.Changed += OnSettingChanged;
+        Closed += (_, _) => _app.SettingsService.Changed -= OnSettingChanged;
+
+        // Lo stato dell'aggiornamento cambia in background: la pagina System si aggiorna da sola.
+        Action onUpdateChanged = () => Dispatcher.BeginInvoke(() => { if (Nav.SelectedIndex == 7) BuildPage(false); });
+        _app.Updates.Changed += onUpdateChanged;
+        Closed += (_, _) => _app.Updates.Changed -= onUpdateChanged;
 
         foreach (var (title, glyph) in Pages)
         {
@@ -59,12 +64,13 @@ public partial class SettingsWindow : Window
     }
 
     // =============================================================================================
-    //  Tema della finestra (chiaro/scuro e accento di Windows)
+    //  Tema della finestra (derivato dal tema della barra)
     // =============================================================================================
 
-    private void OnSystemPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    /// <summary>Quando cambiano i colori del tema (o si applica un altro tema) la finestra si ridipinge.</summary>
+    private void OnSettingChanged(string name)
     {
-        if (e.Category is not (UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle)) return;
+        if (name is not ("Theme" or "Theme.PanelColor" or "Theme.ForegroundColor" or "Theme.AccentColor")) return;
         Dispatcher.BeginInvoke(() =>
         {
             ApplyPalette();
@@ -73,63 +79,58 @@ public partial class SettingsWindow : Window
         });
     }
 
-    private static bool SystemUsesDarkApps()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            return key?.GetValue("AppsUseLightTheme") is int v && v == 0;
-        }
-        catch { return true; }
-    }
+    private static double Luma(Color c) => 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
 
-    private static Color SystemAccent(bool dark)
-    {
-        try
-        {
-            var ui = new global::Windows.UI.ViewManagement.UISettings();
-            var c = ui.GetColorValue(dark ? global::Windows.UI.ViewManagement.UIColorType.AccentLight2 : global::Windows.UI.ViewManagement.UIColorType.AccentDark1);
-            return Color.FromRgb(c.R, c.G, c.B);
-        }
-        catch { return dark ? Color.FromRgb(0x60, 0xCD, 0xFF) : Color.FromRgb(0x00, 0x5F, 0xB8); }
-    }
+    private static Color Blend(Color from, Color to, double amount) => Color.FromRgb(
+        (byte)Math.Round(from.R + (to.R - from.R) * amount),
+        (byte)Math.Round(from.G + (to.G - from.G) * amount),
+        (byte)Math.Round(from.B + (to.B - from.B) * amount));
 
-    /// <summary>Valori dei token Fluent per il tema corrente.</summary>
+    /// <summary>Valori dei token Fluent calcolati dal colore dei menu e dall'accento del tema corrente.</summary>
     private void ApplyPalette()
     {
-        _dark = SystemUsesDarkApps();
-        void Set(string key, string hex)
+        Color panel = ThemeService.ParseColor(T.PanelColor, Color.FromRgb(0x20, 0x20, 0x20));
+        panel = Color.FromRgb(panel.R, panel.G, panel.B);
+        _dark = Luma(panel) < 140;
+
+        Color accent = ThemeService.ParseColor(T.AccentColor, Color.FromRgb(0x60, 0xCD, 0xFF));
+        accent = Color.FromRgb(accent.R, accent.G, accent.B);
+        // Un accento troppo simile allo sfondo sarebbe invisibile: in quel caso si usa il colore del testo.
+        if (Math.Abs(Luma(accent) - Luma(panel)) < 60)
+            accent = _dark ? Colors.White : Color.FromRgb(0x17, 0x18, 0x1C);
+
+        void Set(string key, string hex) => Put(key, (Color)ColorConverter.ConvertFromString(hex));
+        void Put(string key, Color color)
         {
-            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+            var brush = new SolidColorBrush(color);
             brush.Freeze();
             Resources[key] = brush;
         }
 
         if (_dark)
         {
-            Set("S.Window", "#202020"); Set("S.Card", "#0DFFFFFF"); Set("S.CardStroke", "#19000000"); Set("S.Divider", "#15FFFFFF");
+            Put("S.Window", panel); Set("S.Card", "#0DFFFFFF"); Set("S.CardStroke", "#19000000"); Set("S.Divider", "#15FFFFFF");
             Set("S.Text", "#FFFFFF"); Set("S.Text2", "#C5FFFFFF"); Set("S.Text3", "#87FFFFFF");
             Set("S.Control", "#0FFFFFFF"); Set("S.ControlHover", "#15FFFFFF"); Set("S.ControlPressed", "#08FFFFFF");
             Set("S.ControlStroke", "#12FFFFFF"); Set("S.StrongStroke", "#8BFFFFFF");
             Set("S.SubtleHover", "#0FFFFFFF"); Set("S.SubtlePressed", "#0AFFFFFF");
-            Set("S.ToggleOff", "#19000000"); Set("S.Thumb", "#454545"); Set("S.Flyout", "#2C2C2C"); Set("S.OnAccent", "#000000");
+            Set("S.ToggleOff", "#19000000"); Put("S.Thumb", Blend(panel, Colors.White, 0.22)); Put("S.Flyout", Blend(panel, Colors.White, 0.08));
         }
         else
         {
-            Set("S.Window", "#F3F3F3"); Set("S.Card", "#B3FFFFFF"); Set("S.CardStroke", "#0F000000"); Set("S.Divider", "#0F000000");
+            Put("S.Window", Blend(panel, Colors.Black, 0.04)); Set("S.Card", "#B3FFFFFF"); Set("S.CardStroke", "#0F000000"); Set("S.Divider", "#0F000000");
             Set("S.Text", "#E4000000"); Set("S.Text2", "#9E000000"); Set("S.Text3", "#72000000");
             Set("S.Control", "#B3FFFFFF"); Set("S.ControlHover", "#80F9F9F9"); Set("S.ControlPressed", "#4DF9F9F9");
             Set("S.ControlStroke", "#0F000000"); Set("S.StrongStroke", "#72000000");
             Set("S.SubtleHover", "#09000000"); Set("S.SubtlePressed", "#06000000");
-            Set("S.ToggleOff", "#06000000"); Set("S.Thumb", "#FFFFFF"); Set("S.Flyout", "#F9F9F9"); Set("S.OnAccent", "#FFFFFF");
+            Set("S.ToggleOff", "#06000000"); Put("S.Thumb", Colors.White); Put("S.Flyout", Blend(panel, Colors.White, 0.5));
         }
 
-        var accent = new SolidColorBrush(SystemAccent(_dark));
-        accent.Freeze();
-        Resources["S.Accent"] = accent;
+        Put("S.Accent", accent);
+        Put("S.OnAccent", Luma(accent) > 150 ? Colors.Black : Colors.White);
     }
 
-    /// <summary>Barra del titolo dello stesso colore della finestra (Windows 11), scura o chiara come il tema.</summary>
+    /// <summary>Barra del titolo dello stesso colore della finestra (Windows 11), scura o chiara come il tema della barra.</summary>
     private void ApplyTitleBar()
     {
         try
@@ -647,6 +648,22 @@ public partial class SettingsWindow : Window
         Row(recovery, "Emergency exit", "Closes OpSec Bar and restores the Windows taskbar from anywhere.", KeyCaps("Ctrl", "Alt", "Shift", "Q"));
         Row(recovery, "Restart OpSec Bar", null, Btn("Restart", () => _app.ExitApp(true)));
         Row(recovery, "Exit OpSec Bar", "Restores the Windows taskbar.", Btn("Exit", () => _app.ExitApp()));
+
+        var updates = Section("Updates");
+        Row(updates, "Install updates automatically", "Checks the latest GitHub release every time OpSec Bar starts.", Toggle(S.AutoUpdate, v => S.AutoUpdate = v));
+        UpdateService u = _app.Updates;
+        (string status, string? action, Action? run) = u.State switch
+        {
+            UpdateState.Checking => ("Checking for updates…", null, null),
+            UpdateState.Downloading => ($"Downloading version {u.LatestVersion}…", null, null),
+            UpdateState.Available => ($"Version {u.LatestVersion} is available.", "Install", (Action)_app.InstallUpdate),
+            UpdateState.Ready => ($"Version {u.LatestVersion} is ready to install.", "Restart and install", (Action)_app.InstallUpdate),
+            UpdateState.UpToDate => ("You're up to date.", "Check now", (Action)(() => _app.CheckForUpdates(false))),
+            UpdateState.Failed => ("Couldn't check for updates. " + u.Error, "Try again", (Action)(() => _app.CheckForUpdates(false))),
+            _ => ("Not checked yet.", "Check now", (Action)(() => _app.CheckForUpdates(false)))
+        };
+        FrameworkElement control = action != null && run != null ? Btn(action, run, u.State is UpdateState.Available or UpdateState.Ready) : Gap(0);
+        Row(updates, "OpSec Bar " + u.CurrentVersion.ToString(3), status, control);
 
         var about = Section("About");
         Row(about, "Version", null, new TextBlock

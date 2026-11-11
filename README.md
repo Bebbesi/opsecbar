@@ -111,8 +111,20 @@ It opens from the Start button **and from the Windows key**; other shortcuts (Wi
 | System | start with Windows, about |
 
 ### Themes
-Windows 11 Minimal, Glassmorphism, macOS Inspired, Transparent, Dark, Light, Custom.
+Windows 11 Minimal, Glassmorphism, macOS Inspired, Transparent, Dark, Light, Terminal, Custom.
 You can save your own themes, and import or export them as `.json`.
+
+### Updates
+Every time it starts, OpSec Bar checks the [latest GitHub release](https://github.com/Bebbesi/opsecbar/releases/latest).
+If a newer version exists it downloads the package, verifies its SHA-256 digest, replaces its files and restarts.
+Turn this off in *Settings → System → Install updates automatically*; the same page shows the status and a *Check now* button.
+
+To publish a release, set `<Version>` in `src/OpSecBar/OpSecBar.csproj`, commit, then push a matching tag:
+
+```powershell
+git tag v1.2.0
+git push origin v1.2.0      # the Release workflow builds and attaches OpSecBar-win-x64.zip
+```
 
 ## Safety of the original taskbar
 
