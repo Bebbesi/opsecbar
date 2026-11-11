@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using ManagedShell.AppBar;
 using ManagedShell.Common.Helpers;
 using ManagedShell.WindowsTasks;
+using OpSecBar.Controls;
 using OpSecBar.Core;
 using OpSecBar.Models;
 using OpSecBar.Services;
@@ -49,6 +50,8 @@ public partial class TaskbarWindow : AppBarWindow
         Tray.Attach(app.Shell.NotificationArea, AppBarEdge);
         Tray.OverflowOpenChanged += OnPopupStateChanged;
         app.SysInfo.Updated += UpdateSysInfo;
+        app.Audio.Changed += UpdateVolume;
+        CenterPanel.Children.Add(_centerGifHost);
 
         ApplyLayout();
         ApplyElements();
@@ -66,6 +69,7 @@ public partial class TaskbarWindow : AppBarWindow
         {
             _clock.Stop();
             _app.SysInfo.Updated -= UpdateSysInfo;
+            _app.Audio.Changed -= UpdateVolume;
             _backdrop?.Dispose();
             _backdrop = null;
         };
@@ -97,21 +101,31 @@ public partial class TaskbarWindow : AppBarWindow
             LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(TasksScroll, 0);
+            Grid.SetColumn(LeftDock, 0);
             Grid.SetColumn(CenterPanel, 1);
             Grid.SetColumn(RightPanel, 2);
             LayoutGrid.Margin = new Thickness(6, 0, 6, 0);
             TasksScroll.HorizontalAlignment = HorizontalAlignment.Left;
+            LeftDock.HorizontalAlignment = HorizontalAlignment.Left;
         }
         else
         {
             LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(TasksScroll, 0);
+            Grid.SetRow(LeftDock, 0);
             Grid.SetRow(CenterPanel, 1);
             Grid.SetRow(RightPanel, 2);
             LayoutGrid.Margin = new Thickness(0, 6, 0, 6);
+            DockPanel.SetDock(LeftGifHost, Dock.Top);
+            LeftGifHost.Orientation = Orientation.Vertical;
+            LeftGifHost.HorizontalAlignment = HorizontalAlignment.Center;
+            RightGifHost.Orientation = Orientation.Vertical;
+            RightGifHost.HorizontalAlignment = HorizontalAlignment.Center;
+            _centerGifHost.Orientation = Orientation.Vertical;
+            VolumePanel.Orientation = Orientation.Vertical;
+            VolumeText.Margin = new Thickness(0, 3, 0, 0);
+            VolumeText.FontSize = 10;
 
             TasksScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             TasksScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
@@ -129,7 +143,7 @@ public partial class TaskbarWindow : AppBarWindow
             SysInfoText.Margin = new Thickness(0, 6, 0, 6);
             SysInfoText.FontSize = 10;
 
-            foreach (Button b in new[] { ClockButton, QuickButton, StartButton })
+            foreach (Button b in new[] { ClockButton, VolumeButton, QuickButton, StartButton })
             {
                 b.Padding = new Thickness(0, 7, 0, 7);
                 b.Margin = new Thickness(3, 1, 3, 1);
@@ -147,8 +161,13 @@ public partial class TaskbarWindow : AppBarWindow
         QuickButton.Visibility = Vis(_s.ShowQuickSettings);
         StartButton.Visibility = Vis(_s.ShowStartButton);
         SysInfoText.Visibility = Vis(_s.ShowSysInfo);
+        VolumeButton.Visibility = Vis(_s.ShowVolume);
+        ApplyClockLayout();
+        _lastClock = "";
         UpdateClock();
         UpdateSysInfo();
+        UpdateVolume();
+        BuildGifs();
     }
 
     private static Visibility Vis(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
@@ -197,27 +216,69 @@ public partial class TaskbarWindow : AppBarWindow
         double opacity = Math.Clamp(t.Opacity, 0, 1);
         Color hitTestOnly = Color.FromArgb(1, bg.R, bg.G, bg.B); // quasi invisibile ma cliccabile
         bool blurActive = BackdropHelper.BlurActive(t.Backdrop);
+        // Secondo colore facoltativo: lo sfondo diventa una sfumatura lungo la barra.
+        bool hasBg2 = !string.IsNullOrWhiteSpace(t.BackgroundColor2);
+        Color bg2 = ThemeService.ParseColor(t.BackgroundColor2, bg);
+        double angle = IsHorizontal ? 0 : 90;
         BarBorder.Background = t.Backdrop switch
         {
             BackdropMode.Transparent => new SolidColorBrush(hitTestOnly),
             // Con l'acrylic il colore lo mette Windows; se la trasparenza di sistema è spenta lo disegna la barra.
             BackdropMode.Acrylic when blurActive => new SolidColorBrush(hitTestOnly),
+            BackdropMode.Glass when hasBg2 => new LinearGradientBrush(
+                ThemeService.WithAlpha(bg, Math.Min(1, opacity * 1.35)),
+                ThemeService.WithAlpha(bg2, opacity * 0.6), angle),
             BackdropMode.Glass => new LinearGradientBrush(
                 ThemeService.WithAlpha(bg, Math.Min(1, opacity * 1.35)),
                 ThemeService.WithAlpha(bg, opacity * 0.6),
                 IsHorizontal ? 90 : 0),
+            _ when hasBg2 => new LinearGradientBrush(
+                ThemeService.WithAlpha(bg, Math.Max(opacity, 1.0 / 255)),
+                ThemeService.WithAlpha(bg2, Math.Max(opacity, 1.0 / 255)), angle),
             _ => new SolidColorBrush(ThemeService.WithAlpha(bg, Math.Max(opacity, 1.0 / 255)))
         };
 
+        // Bordo: spessore, lati (tutti / solo verso il desktop / solo verso il bordo dello schermo), tinta unita o sfumata.
         double border = Math.Clamp(t.BorderThickness, 0, 6);
-        BarBorder.BorderThickness = new Thickness(border);
-        BarBorder.BorderBrush = border > 0 ? new SolidColorBrush(ThemeService.ParseColor(t.BorderColor, Color.FromArgb(0x33, 255, 255, 255))) : null;
+        BarBorder.BorderThickness = border <= 0 ? new Thickness(0) : t.BorderSides switch
+        {
+            BorderSides.DesktopSide => AppBarEdge switch
+            {
+                AppBarEdge.Bottom => new Thickness(0, border, 0, 0),
+                AppBarEdge.Left => new Thickness(0, 0, border, 0),
+                AppBarEdge.Right => new Thickness(border, 0, 0, 0),
+                _ => new Thickness(0, 0, 0, border)
+            },
+            BorderSides.ScreenSide => AppBarEdge switch
+            {
+                AppBarEdge.Bottom => new Thickness(0, 0, 0, border),
+                AppBarEdge.Left => new Thickness(border, 0, 0, 0),
+                AppBarEdge.Right => new Thickness(0, 0, border, 0),
+                _ => new Thickness(0, border, 0, 0)
+            },
+            _ => new Thickness(border)
+        };
+        Color bc = ThemeService.ParseColor(t.BorderColor, Color.FromArgb(0x33, 255, 255, 255));
+        BarBorder.BorderBrush = border <= 0 ? null
+            : string.IsNullOrWhiteSpace(t.BorderColor2) ? new SolidColorBrush(bc)
+            : new LinearGradientBrush(bc, ThemeService.ParseColor(t.BorderColor2, bc), angle);
 
-        // Ombra: richiede spazio trasparente attorno alla barra, quindi un margine > 0 (barra flottante).
+        // Ombra o alone colorato: richiede spazio trasparente attorno alla barra, quindi un margine > 0 (barra flottante).
         bool shadow = t.Shadow && m > 0;
         ShadowLayer.Visibility = Vis(shadow);
         ShadowShape.Margin = margin;
         ShadowShape.CornerRadius = new CornerRadius(radius);
+        Color sc = ThemeService.ParseColor(t.ShadowColor, Colors.Black);
+        double strength = sc.A / 255.0;
+        ShadowShape.Background = new SolidColorBrush(Color.FromRgb(sc.R, sc.G, sc.B));
+        ShadowShape.Effect = new System.Windows.Media.Effects.DropShadowEffect
+        {
+            Color = Color.FromRgb(sc.R, sc.G, sc.B), BlurRadius = Math.Clamp(t.ShadowSize, 2, 40),
+            ShadowDepth = t.ShadowGlow ? 0 : 2, Direction = 270, Opacity = (t.ShadowGlow ? 0.95 : 0.5) * strength
+        };
+
+        ApplyWidgetStyle(t);
+        BuildGifs();
 
         // In auto-hide la finestra deve restare "toccabile" anche dove è trasparente.
         RootGrid.Background = AppBarMode == AppBarMode.AutoHide ? new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) : null;
@@ -360,14 +421,92 @@ public partial class TaskbarWindow : AppBarWindow
 
     private string _lastClock = "";
 
+    /// <summary>Formatta con un formato personalizzato; se non è valido usa quello predefinito.</summary>
+    private static string Format(DateTime now, string custom, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(custom))
+        {
+            try { return now.ToString(custom, CultureInfo.CurrentCulture); }
+            catch (FormatException) { }
+        }
+        return now.ToString(fallback, CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>Data accanto all'ora oppure sotto (due righe). Sulle barre verticali è sempre sopra.</summary>
+    private void ApplyClockLayout()
+    {
+        if (!IsHorizontal) return;
+        bool below = _s.DateBelowTime;
+        ClockPanel.Orientation = below ? Orientation.Vertical : Orientation.Horizontal;
+        ClockPanel.Children.Clear();
+        if (below)
+        {
+            ClockPanel.Children.Add(ClockTime);
+            ClockPanel.Children.Add(ClockDate);
+            ClockDate.Margin = new Thickness(0, -1, 0, 0);
+            ClockDate.TextAlignment = TextAlignment.Center;
+            ClockDate.HorizontalAlignment = HorizontalAlignment.Center;
+            ClockTime.HorizontalAlignment = HorizontalAlignment.Center;
+            ClockDate.FontSize = Math.Max(8, Math.Clamp(_s.Theme.FontSize, 8, 24) * 0.82);
+        }
+        else
+        {
+            ClockPanel.Children.Add(ClockDate);
+            ClockPanel.Children.Add(ClockTime);
+            ClockDate.Margin = new Thickness(0, 0, 8, 0);
+            ClockDate.ClearValue(TextBlock.FontSizeProperty);
+        }
+    }
+
+    /// <summary>Colori, font e "pillola" di sfondo di orologio, data e volume.</summary>
+    private void ApplyWidgetStyle(ThemeData t)
+    {
+        static void SetColor(TextBlock tb, string hex, string resource)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) tb.SetResourceReference(TextBlock.ForegroundProperty, resource);
+            else tb.Foreground = new SolidColorBrush(ThemeService.ParseColor(hex, Colors.White));
+        }
+
+        SetColor(ClockTime, t.ClockColor, "FgBrush");
+        SetColor(ClockDate, t.DateColor, "FgDimBrush");
+        SetColor(VolumeGlyph, t.VolumeColor, "FgBrush");
+        SetColor(VolumeText, t.VolumeColor, "FgBrush");
+
+        if (string.IsNullOrWhiteSpace(t.ClockFont)) ClockTime.ClearValue(TextBlock.FontFamilyProperty);
+        else
+        {
+            try { ClockTime.FontFamily = new FontFamily(t.ClockFont); } catch { ClockTime.ClearValue(TextBlock.FontFamilyProperty); }
+        }
+        if (t.ClockFontSize > 0) ClockTime.FontSize = Math.Clamp(t.ClockFontSize, 8, 28);
+        else ClockTime.ClearValue(TextBlock.FontSizeProperty);
+        ClockTime.FontWeight = t.ClockBold ? FontWeights.SemiBold : FontWeights.Normal;
+
+        Brush pill = string.IsNullOrWhiteSpace(t.WidgetBackground)
+            ? Brushes.Transparent
+            : new SolidColorBrush(ThemeService.ParseColor(t.WidgetBackground, Colors.Transparent));
+        var corner = new CornerRadius(Math.Clamp(t.WidgetRadius, 0, 20));
+        foreach (Button b in new[] { ClockButton, VolumeButton })
+        {
+            b.Background = pill;
+            if (!string.IsNullOrWhiteSpace(t.WidgetBackground)) b.Margin = IsHorizontal ? new Thickness(3, 4, 3, 4) : new Thickness(4, 3, 4, 3);
+            else if (IsHorizontal) b.ClearValue(MarginProperty);
+            else b.Margin = new Thickness(3, 1, 3, 1);
+            b.ApplyTemplate();
+            if (b.Template?.FindName("Bd", b) is Border bd) bd.CornerRadius = corner;
+        }
+        ApplyClockLayout();
+        _lastClock = "";
+        UpdateClock();
+    }
+
     private void UpdateClock()
     {
         if (!_s.ShowClock) return;
         DateTime now = DateTime.Now;
-        string time = _s.Clock24h
-            ? now.ToString(_s.ShowSeconds ? "HH:mm:ss" : "HH:mm", CultureInfo.CurrentCulture)
-            : now.ToString(_s.ShowSeconds ? "h:mm:ss tt" : "h:mm tt", CultureInfo.CurrentCulture);
-        string date = _s.ShowDate ? now.ToString(IsHorizontal ? "ddd d MMM" : "d/M", CultureInfo.CurrentCulture) : "";
+        string time = Format(now, _s.ClockFormat, _s.Clock24h
+            ? (_s.ShowSeconds ? "HH:mm:ss" : "HH:mm")
+            : (_s.ShowSeconds ? "h:mm:ss tt" : "h:mm tt"));
+        string date = _s.ShowDate ? Format(now, _s.DateFormat, IsHorizontal ? "ddd d MMM" : "d/M") : "";
         if (!IsHorizontal) time = time.Replace(":", "\n").Replace(" ", "\n");
 
         string key = time + "|" + date;
@@ -387,6 +526,144 @@ public partial class TaskbarWindow : AppBarWindow
         string text = $"CPU {si.Cpu}%{sep}RAM {si.Ram}%";
         if (si.Battery >= 0) text += $"{sep}{(si.Charging ? "⚡" : "")}{si.Battery}%";
         SysInfoText.Text = text;
+    }
+
+    // ---- Volume ----------------------------------------------------------------------------------
+
+    private bool _syncingVolume;
+
+    private void UpdateVolume()
+    {
+        if (!_s.ShowVolume) return;
+        AudioService a = _app.Audio;
+        int v = Math.Max(0, a.Volume);
+        string glyph = !a.Available ? "" : a.Muted || v == 0 ? "" : v < 34 ? "" : v < 67 ? "" : "";
+        VolumeGlyph.Text = glyph;
+        MuteGlyph.Text = glyph;
+        bool showText = _s.ShowVolumePercent && a.Available;
+        VolumeText.Text = a.Muted ? "Mute" : v + (IsHorizontal ? "%" : "");
+        VolumeText.Visibility = Vis(showText);
+        VolumeButton.ToolTip = a.Available ? (a.Muted ? $"Volume: muted ({v}%)" : $"Volume: {v}%") + "\nScroll to change · Right-click to mute" : "No audio device";
+        VolumeValue.Text = v.ToString(CultureInfo.CurrentCulture);
+        _syncingVolume = true;
+        VolumeSlider.Value = v;
+        _syncingVolume = false;
+    }
+
+    private void Volume_Click(object sender, RoutedEventArgs e)
+    {
+        VolumeFlyout.Placement = PopupPlacement;
+        UpdateVolume();
+        VolumeFlyout.IsOpen = !VolumeFlyout.IsOpen;
+    }
+
+    private void Volume_Wheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        _app.Audio.SetVolume(Math.Max(0, _app.Audio.Volume) + (e.Delta > 0 ? 2 : -2));
+    }
+
+    private void Volume_RightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _app.Audio.ToggleMute();
+    }
+
+    private void Mute_Click(object sender, RoutedEventArgs e) => _app.Audio.ToggleMute();
+
+    private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        VolumeValue.Text = Math.Round(e.NewValue).ToString(CultureInfo.CurrentCulture);
+        if (!_syncingVolume) _app.Audio.SetVolume((int)Math.Round(e.NewValue));
+    }
+
+    private void SoundSettings_Click(object sender, RoutedEventArgs e)
+    {
+        VolumeFlyout.IsOpen = false;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:sound") { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Error("Impostazioni audio", ex); }
+    }
+
+    private void VolumeFlyout_Opened(object? sender, EventArgs e) => OnPopupStateChanged(true);
+    private void VolumeFlyout_Closed(object? sender, EventArgs e) => OnPopupStateChanged(false);
+
+    // ---- GIF -------------------------------------------------------------------------------------
+
+    private readonly StackPanel _centerGifHost = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+    private string _gifSignature = "";
+
+    /// <summary>Mostra le GIF abilitate nella posizione scelta. Non fa nulla se nulla è cambiato.</summary>
+    private void BuildGifs()
+    {
+        var items = _s.Gifs.Where(g => g.Enabled && System.IO.File.Exists(GifService.FullPath(g))).ToList();
+        double thickness = Math.Clamp(_s.Theme.BarHeight, 24, 96);
+        double size = _s.GifSize > 0 ? _s.GifSize : thickness - 10;
+        size = Math.Clamp(size, 12, thickness - 2);
+        string signature = $"{_s.GifPlacement}|{size}|{string.Join("|", items.Select(g => g.File))}";
+        if (signature == _gifSignature) return;
+        _gifSignature = signature;
+
+        LeftGifHost.Children.Clear();
+        RightGifHost.Children.Clear();
+        _centerGifHost.Children.Clear();
+        Panel host = _s.GifPlacement switch
+        {
+            GifPlacement.Left => LeftGifHost,
+            GifPlacement.Right => RightGifHost,
+            _ => _centerGifHost
+        };
+
+        foreach (GifItem item in items)
+        {
+            var gif = new GifImage
+            {
+                Margin = IsHorizontal ? new Thickness(3, 0, 3, 0) : new Thickness(0, 3, 0, 3),
+                ToolTip = System.IO.Path.GetFileNameWithoutExtension(item.File),
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center
+            };
+            if (!IsHorizontal) gif.MaxWidth = thickness - 8;
+            gif.MouseRightButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                var menu = new ContextMenu();
+                menu.Items.Add(MenuEntry("Hide this GIF", "", () =>
+                {
+                    item.Enabled = false;
+                    _app.SettingsService.Notify(nameof(AppSettings.Gifs));
+                }));
+                menu.Items.Add(MenuEntry("GIF settings…", "", () => _app.ShowSettings("GIFs")));
+                OpenMenu(menu, gif);
+            };
+            gif.Load(GifService.FullPath(item), size);
+            host.Children.Add(gif);
+        }
+    }
+
+    private static IEnumerable<string> DroppedGifs(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files
+            ? files.Where(f => string.Equals(System.IO.Path.GetExtension(f), ".gif", StringComparison.OrdinalIgnoreCase))
+            : Enumerable.Empty<string>();
+
+    private void Bar_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DroppedGifs(e).Any() ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>File .gif trascinati sulla barra: copiati nella cartella dell'app e mostrati subito.</summary>
+    private void Bar_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        bool added = false;
+        foreach (string file in DroppedGifs(e).ToList())
+        {
+            if (GifService.Import(file) is { } item)
+            {
+                _s.Gifs.Add(item);
+                added = true;
+            }
+        }
+        if (added) _app.SettingsService.Notify(nameof(AppSettings.Gifs));
     }
 
     // ---- Pulsanti a destra -----------------------------------------------------------------------

@@ -22,6 +22,7 @@ public partial class App : Application
     public TaskListService TaskList { get; private set; } = null!;
     public MediaService Media { get; private set; } = null!;
     public SystemInfoService SysInfo { get; private set; } = null!;
+    public AudioService Audio { get; private set; } = null!;
     public AppCatalogService Catalog { get; } = new();
     public UpdateService Updates { get; } = new();
 
@@ -113,6 +114,8 @@ public partial class App : Application
             if (Settings.ShowMediaPlayer) Media.Start();
             SysInfo = new SystemInfoService();
             SysInfo.SetEnabled(Settings.ShowSysInfo);
+            Audio = new AudioService(Dispatcher);
+            Audio.SetEnabled(Settings.ShowVolume);
 
             SettingsService.Changed += OnSettingChanged;
             // Se l'utente attiva/disattiva gli effetti di trasparenza di Windows, blur e acrylic si adeguano subito.
@@ -267,6 +270,9 @@ public partial class App : Application
                 case nameof(AppSettings.GroupWindows):
                     TaskList.ScheduleRebuild();
                     break;
+                case nameof(AppSettings.RecentColors):
+                case nameof(AppSettings.PinnedTrayIcons):
+                    break; // solo da salvare
                 case nameof(AppSettings.StartFavorites):
                 case nameof(AppSettings.StartShowFavorites):
                 case nameof(AppSettings.StartMenuWidth):
@@ -279,6 +285,7 @@ public partial class App : Application
                         if (Settings.ShowMediaPlayer) Media.Start(); else Media.Stop();
                     }
                     if (name == nameof(AppSettings.ShowSysInfo)) SysInfo.SetEnabled(Settings.ShowSysInfo);
+                    if (name == nameof(AppSettings.ShowVolume)) Audio.SetEnabled(Settings.ShowVolume);
                     foreach (var bar in _bars) bar.ApplyElements();
                     break;
             }
@@ -286,7 +293,10 @@ public partial class App : Application
         catch (Exception ex) { Log.Error($"Applicazione impostazione {name}", ex); }
     }
 
-    public void ShowSettings()
+    public void ShowSettings() => ShowSettings(null);
+
+    /// <summary>Apre le Impostazioni, facoltativamente su una pagina precisa (es. "GIFs").</summary>
+    public void ShowSettings(string? page)
     {
         _startMenu?.HideMenu();
         if (_settingsWindow == null)
@@ -294,6 +304,7 @@ public partial class App : Application
             _settingsWindow = new SettingsWindow(this);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
+        if (page != null) _settingsWindow.ShowPage(page);
         _settingsWindow.Show();
         if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
         _settingsWindow.Activate();

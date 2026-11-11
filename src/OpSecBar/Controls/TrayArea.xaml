@@ -6,7 +6,7 @@
         <DataTemplate x:Key="TrayIconTemplate">
             <Border x:Name="Bd" Width="26" Height="26" Margin="1" CornerRadius="5" Background="Transparent"
                     MouseEnter="Icon_MouseEnter" MouseLeave="Icon_MouseLeave" MouseMove="Icon_MouseMove"
-                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp">
+                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp" LostMouseCapture="Icon_LostMouseCapture">
                 <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
             </Border>
             <DataTemplate.Triggers>
@@ -19,7 +19,7 @@
         <DataTemplate x:Key="OverflowIconTemplate">
             <Border x:Name="Bd" Width="34" Height="34" Margin="1" CornerRadius="7" Background="Transparent"
                     MouseEnter="Icon_MouseEnter" MouseLeave="Icon_MouseLeave" MouseMove="Icon_MouseMove"
-                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp">
+                    PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp" LostMouseCapture="Icon_LostMouseCapture">
                 <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
             </Border>
             <DataTemplate.Triggers>

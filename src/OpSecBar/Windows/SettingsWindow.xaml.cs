@@ -31,7 +31,8 @@ public partial class SettingsWindow : Window
     private static readonly (string Title, string Glyph)[] Pages =
     {
         ("Appearance", ""), ("Themes", ""), ("Behavior", ""), ("Taskbar items", ""),
-        ("Pinned apps", ""), ("System tray", ""), ("Start menu", ""), ("System", "")
+        ("Pinned apps", ""), ("System tray", ""), ("Start menu", ""), ("Widgets", "\uE823"), ("GIFs", "\uE8B9"),
+        ("System", "")
     };
 
     public SettingsWindow(App app)
@@ -46,7 +47,7 @@ public partial class SettingsWindow : Window
         Closed += (_, _) => _app.SettingsService.Changed -= OnSettingChanged;
 
         // Lo stato dell'aggiornamento cambia in background: la pagina System si aggiorna da sola.
-        Action onUpdateChanged = () => Dispatcher.BeginInvoke(() => { if (Nav.SelectedIndex == 7) BuildPage(false); });
+        Action onUpdateChanged = () => Dispatcher.BeginInvoke(() => { if (CurrentPage == "System") BuildPage(false); });
         _app.Updates.Changed += onUpdateChanged;
         Closed += (_, _) => _app.Updates.Changed -= onUpdateChanged;
 
@@ -70,6 +71,13 @@ public partial class SettingsWindow : Window
     /// <summary>Quando cambiano i colori del tema (o si applica un altro tema) la finestra si ridipinge.</summary>
     private void OnSettingChanged(string name)
     {
+        // GIF aggiunte trascinandole sulla barra, icone del tray spostate a mano: la pagina aperta si aggiorna.
+        if ((name == nameof(AppSettings.Gifs) && CurrentPage == "GIFs") ||
+            (name == nameof(AppSettings.PinnedTrayIcons) && CurrentPage == "System tray"))
+        {
+            Dispatcher.BeginInvoke(() => BuildPage(false));
+            return;
+        }
         if (name is not ("Theme" or "Theme.PanelColor" or "Theme.ForegroundColor" or "Theme.AccentColor")) return;
         Dispatcher.BeginInvoke(() =>
         {
@@ -153,22 +161,33 @@ public partial class SettingsWindow : Window
 
     private void Nav_SelectionChanged(object sender, SelectionChangedEventArgs e) => BuildPage(true);
 
+    private string CurrentPage => Nav.SelectedIndex >= 0 && Nav.SelectedIndex < Pages.Length ? Pages[Nav.SelectedIndex].Title : "";
+
+    /// <summary>Apre una pagina per titolo (es. dal menu di una GIF sulla barra).</summary>
+    public void ShowPage(string title)
+    {
+        int index = Array.FindIndex(Pages, p => p.Title == title);
+        if (index >= 0) Nav.SelectedIndex = index;
+    }
+
     private void BuildPage(bool animate)
     {
         double offset = animate ? 0 : PageScroll.VerticalOffset;
         PageHost.Children.Clear();
         try
         {
-            switch (Nav.SelectedIndex)
+            switch (CurrentPage)
             {
-                case 0: BuildAppearance(); break;
-                case 1: BuildThemes(); break;
-                case 2: BuildBehavior(); break;
-                case 3: BuildItems(); break;
-                case 4: BuildPinnedApps(); break;
-                case 5: BuildTray(); break;
-                case 6: BuildStartMenu(); break;
-                case 7: BuildSystem(); break;
+                case "Appearance": BuildAppearance(); break;
+                case "Themes": BuildThemes(); break;
+                case "Behavior": BuildBehavior(); break;
+                case "Taskbar items": BuildItems(); break;
+                case "Pinned apps": BuildPinnedApps(); break;
+                case "System tray": BuildTray(); break;
+                case "Start menu": BuildStartMenu(); break;
+                case "Widgets": BuildWidgets(); break;
+                case "GIFs": BuildGifs(); break;
+                case "System": BuildSystem(); break;
             }
         }
         catch (Exception ex) { Log.Error("Costruzione pagina impostazioni", ex); }
@@ -206,6 +225,8 @@ public partial class SettingsWindow : Window
             (BackdropMode.Acrylic, "Acrylic"), (BackdropMode.Glass, "Glass")
         }, T.Backdrop, v => { Edit(t => t.Backdrop = v); Refresh(); }));
         Row(bg, "Color", null, ColorCtl(T.BackgroundColor, v => Edit(t => t.BackgroundColor = v)));
+        Row(bg, "Gradient", "Blends the background into a second color along the bar.",
+            OptionalColorCtl(T.BackgroundColor2, "#7C3AED", v => Edit(t => t.BackgroundColor2 = v)));
         Row(bg, "Opacity", null, SliderCtl(T.Opacity * 100, 0, 100, 1, "0'%'", v => Edit(t => t.Opacity = v / 100)));
 
         var colors = Section("Colors");
@@ -218,9 +239,21 @@ public partial class SettingsWindow : Window
         Row(shape, "Height", "Becomes the width when the bar is docked left or right.", SliderCtl(T.BarHeight, 24, 72, 1, "0 px", v => Edit(t => t.BarHeight = v)));
         Row(shape, "Corner radius", null, SliderCtl(T.CornerRadius, 0, 30, 1, "0 px", v => Edit(t => t.CornerRadius = v)));
         Row(shape, "Floating margin", "Gap between the bar and the screen edges.", SliderCtl(T.Margin, 0, 24, 1, "0 px", v => Edit(t => t.Margin = v)));
-        Row(shape, "Border width", null, SliderCtl(T.BorderThickness, 0, 4, 0.5, "0.# px", v => Edit(t => t.BorderThickness = v)));
-        Row(shape, "Border color", null, ColorCtl(T.BorderColor, v => Edit(t => t.BorderColor = v)));
-        Row(shape, "Shadow", "Needs a floating margin.", Toggle(T.Shadow, v => Edit(t => t.Shadow = v)));
+        var border = Section("Border");
+        Row(border, "Width", null, SliderCtl(T.BorderThickness, 0, 6, 0.5, "0.# px", v => Edit(t => t.BorderThickness = v)));
+        Row(border, "Sides", "Draw the border all around, or as a single line on one side.", ComboCtl(new[]
+        {
+            (BorderSides.All, "All sides"), (BorderSides.DesktopSide, "Desktop side only"), (BorderSides.ScreenSide, "Screen edge only")
+        }, T.BorderSides, v => Edit(t => t.BorderSides = v), 200));
+        Row(border, "Color", null, ColorCtl(T.BorderColor, v => Edit(t => t.BorderColor = v)));
+        Row(border, "Gradient", "Fades the border into a second color, great for neon looks.",
+            OptionalColorCtl(T.BorderColor2, "#00F0FF", v => Edit(t => t.BorderColor2 = v)));
+
+        var shadow = Section("Shadow and glow");
+        Row(shadow, "Shadow", "Needs a floating margin.", Toggle(T.Shadow, v => Edit(t => t.Shadow = v)));
+        Row(shadow, "Glow", "Spreads the shadow evenly around the bar, like a neon light.", Toggle(T.ShadowGlow, v => Edit(t => t.ShadowGlow = v)));
+        Row(shadow, "Color", null, ColorCtl(T.ShadowColor, v => Edit(t => t.ShadowColor = v)));
+        Row(shadow, "Size", null, SliderCtl(T.ShadowSize, 4, 40, 1, "0 px", v => Edit(t => t.ShadowSize = v)));
 
         var icons = Section("Icons");
         Row(icons, "Icon size", null, SliderCtl(T.IconSize, 14, 40, 1, "0 px", v => Edit(t => t.IconSize = v)));
@@ -392,20 +425,38 @@ public partial class SettingsWindow : Window
             left.Children.Add(icon);
         }
         var right = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        right.Children.Add(new Border { Width = 22, Height = 3, CornerRadius = new CornerRadius(1.5), Background = new SolidColorBrush(ThemeService.WithAlpha(fg, 0.7)), Margin = new Thickness(0, 0, 6, 0) });
+        Color clock = ThemeService.ParseColor(string.IsNullOrWhiteSpace(theme.ClockColor) ? null : theme.ClockColor, ThemeService.WithAlpha(fg, 0.7));
+        right.Children.Add(new Border { Width = 22, Height = 3, CornerRadius = new CornerRadius(1.5), Background = new SolidColorBrush(clock), Margin = new Thickness(0, 0, 6, 0) });
         right.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(accent) });
         content.Children.Add(left);
         content.Children.Add(right);
 
         double border = Math.Min(theme.BorderThickness, 1);
-        desktop.Child = new Border
+        double alpha = Math.Max(theme.Opacity, 0.3);
+        Color bc = ThemeService.ParseColor(theme.BorderColor, Colors.Transparent);
+        var bar = new Border
         {
             Height = Math.Clamp(theme.BarHeight * 0.42, 13, 22), VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(margin, margin, margin, 0), CornerRadius = new CornerRadius(radius), Child = content,
-            Background = noFill ? Brushes.Transparent : new SolidColorBrush(ThemeService.WithAlpha(bg, Math.Max(theme.Opacity, 0.3))),
-            BorderThickness = new Thickness(border),
-            BorderBrush = border > 0 ? new SolidColorBrush(ThemeService.ParseColor(theme.BorderColor, Colors.Transparent)) : null
+            Background = noFill ? Brushes.Transparent
+                : string.IsNullOrWhiteSpace(theme.BackgroundColor2) ? new SolidColorBrush(ThemeService.WithAlpha(bg, alpha))
+                : new LinearGradientBrush(ThemeService.WithAlpha(bg, alpha), ThemeService.WithAlpha(ThemeService.ParseColor(theme.BackgroundColor2, bg), alpha), 0),
+            BorderThickness = border <= 0 ? new Thickness(0) : theme.BorderSides switch
+            {
+                BorderSides.DesktopSide => new Thickness(0, 0, 0, border),
+                BorderSides.ScreenSide => new Thickness(0, border, 0, 0),
+                _ => new Thickness(border)
+            },
+            BorderBrush = border <= 0 ? null
+                : string.IsNullOrWhiteSpace(theme.BorderColor2) ? new SolidColorBrush(bc)
+                : new LinearGradientBrush(bc, ThemeService.ParseColor(theme.BorderColor2, bc), 0)
         };
+        if (theme.Shadow && theme.ShadowGlow && theme.Margin > 0)
+        {
+            Color glow = ThemeService.ParseColor(theme.ShadowColor, Colors.Black);
+            bar.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(glow.R, glow.G, glow.B), ShadowDepth = 0, BlurRadius = 10, Opacity = 0.9 };
+        }
+        desktop.Child = bar;
         return desktop;
     }
 
@@ -475,6 +526,7 @@ public partial class SettingsWindow : Window
 
         var other = Section("Corner");
         Row(other, "System tray", "Icons of apps running in the background.", Toggle(S.ShowTray, v => S.ShowTray = v));
+        Row(other, "Volume", "Style it in Widgets.", Toggle(S.ShowVolume, v => S.ShowVolume = v));
         Row(other, "Quick settings button", "Opens Windows quick settings for Wi‑Fi, sound and brightness.", Toggle(S.ShowQuickSettings, v => S.ShowQuickSettings = v));
         Row(other, "Start button", null, Toggle(S.ShowStartButton, v => S.ShowStartButton = v));
         Row(other, "System monitor", "CPU, memory and battery.", Toggle(S.ShowSysInfo, v => S.ShowSysInfo = v));
@@ -578,7 +630,9 @@ public partial class SettingsWindow : Window
         NotificationArea area = _app.Shell.NotificationArea;
         var icons = area.TrayIcons.ToList();
 
-        SectionHeader("Always show on the taskbar", "Icons that are turned off stay in the hidden icons flyout.");
+        SectionHeader("Always show on the taskbar",
+            "Icons that are turned off stay in the hidden icons flyout. Tip: drag an icon out of the flyout onto the bar to show it, " +
+            "drag it along the bar to reorder, or drag it off the bar to hide it again.");
         var card = Card();
         if (icons.Count == 0) card.Children.Add(Empty("No apps are showing a tray icon right now."));
 
@@ -631,6 +685,203 @@ public partial class SettingsWindow : Window
                 Refresh();
             }));
         }
+    }
+
+    private List<string> FontNames() =>
+        Fonts.SystemFontFamilies.Select(f => f.Source).Distinct().OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase).ToList();
+
+    private void BuildWidgets()
+    {
+        PageTitle("Widgets");
+
+        var clock = Section("Clock");
+        Row(clock, "Show the clock", null, Toggle(S.ShowClock, v => S.ShowClock = v));
+        Row(clock, "Time format", "Leave empty for automatic. Examples: HH:mm · h:mm tt · HH:mm:ss · H.mm",
+            FormatCtl(S.ClockFormat, "HH:mm", v => S.ClockFormat = v));
+        Row(clock, "Color", "Off = same as the bar text.", OptionalColorCtl(T.ClockColor, T.AccentColor, v => Edit(t => t.ClockColor = v)));
+        var fonts = FontNames();
+        fonts.Insert(0, "Same as the bar");
+        string clockFont = string.IsNullOrWhiteSpace(T.ClockFont) ? "Same as the bar" : T.ClockFont.Split(',')[0].Trim();
+        if (!fonts.Contains(clockFont)) fonts.Insert(1, clockFont);
+        Row(clock, "Font", null, ComboCtl(fonts.Select(f => (f, f)).ToArray(), clockFont,
+            v => Edit(t => t.ClockFont = v == "Same as the bar" ? "" : v == "Segoe UI" ? v : v + ", Segoe UI"), 240));
+        Row(clock, "Text size", "0 = same as the bar.", SliderCtl(T.ClockFontSize, 0, 28, 0.5, "0.#", v => Edit(t => t.ClockFontSize = v)));
+        Row(clock, "Bold", null, Toggle(T.ClockBold, v => Edit(t => t.ClockBold = v)));
+        Row(clock, "24-hour clock", null, Toggle(S.Clock24h, v => S.Clock24h = v));
+        Row(clock, "Seconds", null, Toggle(S.ShowSeconds, v => S.ShowSeconds = v));
+
+        var date = Section("Calendar (date)");
+        Row(date, "Show the date", null, Toggle(S.ShowDate, v => S.ShowDate = v));
+        Row(date, "Date format", "Leave empty for automatic. Examples: ddd d MMM · dd/MM/yyyy · dddd · d MMMM",
+            FormatCtl(S.DateFormat, "ddd d MMM", v => S.DateFormat = v));
+        Row(date, "Color", "Off = dimmed bar text.", OptionalColorCtl(T.DateColor, T.ForegroundColor, v => Edit(t => t.DateColor = v)));
+        Row(date, "Show below the time", "Puts time and date on two lines (horizontal bars).", Toggle(S.DateBelowTime, v => S.DateBelowTime = v));
+
+        var volume = Section("Volume");
+        Row(volume, "Show volume", "Click for a slider, scroll to change it, right-click to mute.", Toggle(S.ShowVolume, v => S.ShowVolume = v));
+        Row(volume, "Show percentage", null, Toggle(S.ShowVolumePercent, v => S.ShowVolumePercent = v));
+        Row(volume, "Icon color", "Off = same as the bar text.", OptionalColorCtl(T.VolumeColor, T.AccentColor, v => Edit(t => t.VolumeColor = v)));
+
+        var pill = Section("Widget background");
+        Row(pill, "Background", "A rounded pill behind the clock and the volume.",
+            OptionalColorCtl(T.WidgetBackground, "#26FFFFFF", v => Edit(t => t.WidgetBackground = v)));
+        Row(pill, "Corner radius", null, SliderCtl(T.WidgetRadius, 0, 20, 1, "0 px", v => Edit(t => t.WidgetRadius = v)));
+    }
+
+    /// <summary>Casella per un formato data/ora .NET con anteprima dal vivo.</summary>
+    private FrameworkElement FormatCtl(string value, string placeholder, Action<string> set)
+    {
+        var box = new TextBox
+        {
+            Style = (Style)FindResource("S.TextBox"), Width = 180, Text = value,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 13
+        };
+        var preview = new TextBlock { FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
+        void ShowPreview()
+        {
+            string f = box.Text.Trim();
+            try { preview.Text = "Preview: " + DateTime.Now.ToString(f.Length == 0 ? placeholder : f, CultureInfo.CurrentCulture); }
+            catch (FormatException) { preview.Text = "Invalid format"; }
+        }
+        void Commit()
+        {
+            string f = box.Text.Trim();
+            if (f.Length > 0)
+            {
+                try { _ = DateTime.Now.ToString(f, CultureInfo.CurrentCulture); }
+                catch (FormatException) { return; }
+            }
+            Safe(() => set(f));
+        }
+        box.TextChanged += (_, _) => ShowPreview();
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Commit(); };
+        box.LostKeyboardFocus += (_, _) => Commit();
+        ShowPreview();
+        var panel = new StackPanel();
+        panel.Children.Add(box);
+        panel.Children.Add(preview);
+        return panel;
+    }
+
+    private void BuildGifs()
+    {
+        PageTitle("GIFs");
+
+        // Area di caricamento: trascina qui i file o clicca per sceglierli.
+        var dashed = new System.Windows.Shapes.Rectangle
+        {
+            RadiusX = 8, RadiusY = 8, StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 4, 3 },
+            Stroke = (Brush)FindResource("S.StrongStroke")
+        };
+        var dropText = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 26, 16, 26) };
+        dropText.Children.Add(new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 28, HorizontalAlignment = HorizontalAlignment.Center, Foreground = (Brush)FindResource("S.Accent") });
+        dropText.Children.Add(new TextBlock { Text = "Drop GIF files here", FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 2) });
+        dropText.Children.Add(new TextBlock
+        {
+            Text = "or click to browse. You can also drop a GIF straight onto the taskbar.", FontSize = 12,
+            Foreground = (Brush)FindResource("S.Text2"), HorizontalAlignment = HorizontalAlignment.Center
+        });
+        var zoneGrid = new Grid();
+        zoneGrid.Children.Add(dashed);
+        zoneGrid.Children.Add(dropText);
+        var zone = new Border
+        {
+            Background = (Brush)FindResource("S.Card"), CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 16, 0, 0),
+            AllowDrop = true, Cursor = Cursors.Hand, Child = zoneGrid
+        };
+        zone.MouseEnter += (_, _) => dashed.Stroke = (Brush)FindResource("S.Accent");
+        zone.MouseLeave += (_, _) => dashed.Stroke = (Brush)FindResource("S.StrongStroke");
+        zone.DragEnter += (_, _) => { dashed.Stroke = (Brush)FindResource("S.Accent"); zone.Background = (Brush)FindResource("S.SubtleHover"); };
+        zone.DragLeave += (_, _) => { dashed.Stroke = (Brush)FindResource("S.StrongStroke"); zone.Background = (Brush)FindResource("S.Card"); };
+        zone.DragOver += (_, e) =>
+        {
+            bool ok = e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Any(IsGif);
+            e.Effects = ok ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        };
+        zone.Drop += (_, e) =>
+        {
+            e.Handled = true;
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files) AddGifs(files);
+        };
+        zone.MouseLeftButtonUp += (_, _) =>
+        {
+            var dialog = new OpenFileDialog { Title = "Choose GIFs", Filter = "Animated GIF (*.gif)|*.gif", Multiselect = true };
+            if (dialog.ShowDialog(this) == true) AddGifs(dialog.FileNames);
+        };
+        PageHost.Children.Add(zone);
+
+        var display = Section("Display");
+        Row(display, "Position", null, ComboCtl(new[]
+        {
+            (GifPlacement.Left, "Left, before the apps"), (GifPlacement.Center, "Center"), (GifPlacement.Right, "Right, before the clock")
+        }, S.GifPlacement, v => S.GifPlacement = v, 220));
+        Row(display, "Size", "0 = fit the bar height.", SliderCtl(S.GifSize, 0, 96, 1, "0 px", v => S.GifSize = v));
+
+        SectionHeader("Your GIFs", "Turn a GIF off to keep it here without showing it on the bar.");
+        var list = Card();
+        if (S.Gifs.Count == 0) list.Children.Add(Empty("No GIFs yet. Drop some in the area above."));
+        for (int i = 0; i < S.Gifs.Count; i++)
+        {
+            int index = i;
+            GifItem item = S.Gifs[i];
+            var thumb = new Controls.GifImage { Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center };
+            thumb.Load(GifService.FullPath(item), 36);
+            var label = new DockPanel();
+            DockPanel.SetDock(thumb, Dock.Left);
+            label.Children.Add(thumb);
+            label.Children.Add(new TextBlock
+            {
+                Text = System.IO.Path.GetFileNameWithoutExtension(item.File), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+            buttons.Children.Add(Toggle(item.Enabled, v =>
+            {
+                item.Enabled = v;
+                _app.SettingsService.Notify(nameof(AppSettings.Gifs));
+            }));
+            buttons.Children.Add(Gap(12));
+            buttons.Children.Add(IconBtn("", "Move up", () => MoveGif(index, -1), index > 0));
+            buttons.Children.Add(IconBtn("", "Move down", () => MoveGif(index, 1), index < S.Gifs.Count - 1));
+            buttons.Children.Add(IconBtn("", "Delete", () =>
+            {
+                S.Gifs.RemoveAt(index);
+                GifService.Delete(item);
+                GifsChanged();
+            }));
+            RowCustom(list, label, buttons);
+        }
+    }
+
+    private static bool IsGif(string path) => string.Equals(System.IO.Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase);
+
+    private void AddGifs(IEnumerable<string> files)
+    {
+        bool added = false;
+        foreach (string file in files.Where(IsGif))
+        {
+            if (GifService.Import(file) is { } item)
+            {
+                S.Gifs.Add(item);
+                added = true;
+            }
+        }
+        if (added) GifsChanged();
+    }
+
+    private void MoveGif(int index, int delta)
+    {
+        int target = index + delta;
+        if (target < 0 || target >= S.Gifs.Count) return;
+        (S.Gifs[index], S.Gifs[target]) = (S.Gifs[target], S.Gifs[index]);
+        GifsChanged();
+    }
+
+    private void GifsChanged()
+    {
+        _app.SettingsService.Notify(nameof(AppSettings.Gifs));
+        Refresh();
     }
 
     private void BuildSystem()
@@ -880,23 +1131,230 @@ public partial class SettingsWindow : Window
         }
 
         box.LostKeyboardFocus += (_, _) => { if (!string.Equals(box.Text, hex, StringComparison.OrdinalIgnoreCase)) Commit(box.Text); };
-        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Commit(box.Text); };
-        swatch.Click += (_, _) =>
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(box.Text); AddRecentColor(hex); } };
+        swatch.Click += (_, _) => OpenColorFlyout(swatch, () => hex, (c, remember) =>
         {
-            Color now = ThemeService.ParseColor(hex, Colors.White);
-            using var dialog = new System.Windows.Forms.ColorDialog
-            {
-                FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(now.R, now.G, now.B)
-            };
-            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-            // La finestra dei colori non gestisce la trasparenza: si conserva quella attuale.
-            Commit(ThemeService.ToHex(Color.FromArgb(now.A, dialog.Color.R, dialog.Color.G, dialog.Color.B)));
-        };
+            Commit(c);
+            if (remember) AddRecentColor(hex);
+        });
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         panel.Children.Add(swatch);
         panel.Children.Add(box);
         return panel;
+    }
+
+    /// <summary>Colore opzionale: interruttore + selettore. Spento = stringa vuota (si usa il valore predefinito).</summary>
+    private FrameworkElement OptionalColorCtl(string hex, string fallback, Action<string> set)
+    {
+        bool on = !string.IsNullOrWhiteSpace(hex);
+        var picker = ColorCtl(on ? hex : fallback, v => set(v));
+        picker.IsEnabled = on;
+        picker.Opacity = on ? 1 : 0.4;
+        picker.Margin = new Thickness(12, 0, 0, 0);
+        var toggle = new CheckBox { Style = (Style)FindResource("S.Toggle"), IsChecked = on, VerticalAlignment = VerticalAlignment.Center };
+        toggle.Checked += (_, _) => Safe(() => { set(fallback); Refresh(); });
+        toggle.Unchecked += (_, _) => Safe(() => { set(""); Refresh(); });
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(toggle);
+        panel.Children.Add(picker);
+        return panel;
+    }
+
+    private static readonly string[] Palette =
+    {
+        "#FFFFFF", "#C8CCD4", "#8A8F98", "#4B4F57", "#1E1F24", "#000000", "#FF3B5C", "#FF2E97", "#FF7A00", "#FFC233",
+        "#F9F871", "#7CFF6B", "#00E676", "#00F0FF", "#3DA9FC", "#2563EB", "#7C5CFF", "#B967FF", "#FFB3C7", "#C3B1E1",
+    };
+
+    private void AddRecentColor(string hex)
+    {
+        var list = S.RecentColors;
+        list.RemoveAll(c => string.Equals(c, hex, StringComparison.OrdinalIgnoreCase));
+        list.Insert(0, hex);
+        if (list.Count > 14) list.RemoveRange(14, list.Count - 14);
+        _app.SettingsService.Notify(nameof(AppSettings.RecentColors));
+    }
+
+    /// <summary>
+    /// Flyout del selettore colore: anteprima, contagocce (prendi un colore dallo schermo), tavolozza, colori recenti,
+    /// opacità e la finestra classica di Windows per tutti gli altri colori.
+    /// </summary>
+    private void OpenColorFlyout(FrameworkElement anchor, Func<string> current, Action<string, bool> apply)
+    {
+        Brush text2 = (Brush)FindResource("S.Text2");
+        Color Now() => ThemeService.ParseColor(current(), Colors.White);
+
+        var popup = new Popup
+        {
+            PlacementTarget = anchor, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true,
+            PopupAnimation = PopupAnimation.Fade, VerticalOffset = 4
+        };
+        var root = new StackPanel { Width = 284 };
+
+        // Anteprima grande + valore
+        var preview = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(8), BorderBrush = (Brush)FindResource("S.ControlStroke"), BorderThickness = new Thickness(1) };
+        var previewHex = new TextBlock { FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 15, VerticalAlignment = VerticalAlignment.Center };
+        var previewRgb = new TextBlock { FontSize = 12, Foreground = text2, Margin = new Thickness(0, 2, 0, 0) };
+        var previewText = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        previewText.Children.Add(previewHex);
+        previewText.Children.Add(previewRgb);
+        var head = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
+        head.Children.Add(preview);
+        head.Children.Add(previewText);
+        root.Children.Add(head);
+
+        Slider? alpha = null;
+        TextBlock? alphaLabel = null;
+        bool syncing = false;
+        void ShowCurrent()
+        {
+            Color c = Now();
+            preview.Background = new SolidColorBrush(c);
+            previewHex.Text = ThemeService.ToHex(c);
+            previewRgb.Text = $"RGB {c.R}, {c.G}, {c.B}" + (c.A < 255 ? $" · {Math.Round(c.A / 2.55)}%" : "");
+            if (alpha != null)
+            {
+                syncing = true;
+                alpha.Value = Math.Round(c.A / 2.55);
+                syncing = false;
+            }
+        }
+
+        // Applica un colore RGB mantenendo l'opacità attuale.
+        void PickRgb(Color c, bool remember)
+        {
+            Color now = Now();
+            apply(ThemeService.ToHex(Color.FromArgb(now.A, c.R, c.G, c.B)), remember);
+            ShowCurrent();
+        }
+
+        FrameworkElement Swatch(string hex, Action click)
+        {
+            Color c = ThemeService.ParseColor(hex, Colors.Transparent);
+            // Scacchiera sotto ai colori semitrasparenti
+            var checker = new DrawingBrush
+            {
+                TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 8, 8), ViewportUnits = BrushMappingMode.Absolute,
+                Drawing = new GeometryDrawing(Brushes.LightGray, null, new GeometryGroup
+                {
+                    Children = { new RectangleGeometry(new Rect(0, 0, 4, 4)), new RectangleGeometry(new Rect(4, 4, 4, 4)) }
+                })
+            };
+            var cell = new Grid { Width = 22, Height = 22 };
+            if (c.A < 255) cell.Children.Add(new Border { CornerRadius = new CornerRadius(5), Background = checker });
+            cell.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(5), Background = new SolidColorBrush(c),
+                BorderBrush = (Brush)FindResource("S.ControlStroke"), BorderThickness = new Thickness(1)
+            });
+            var b = new Button
+            {
+                Style = (Style)FindResource("S.IconButton"), Width = 26, Height = 26, Margin = new Thickness(0, 0, 2, 2),
+                Content = cell, ToolTip = hex, Cursor = Cursors.Hand
+            };
+            b.Click += (_, _) => Safe(click);
+            return b;
+        }
+
+        TextBlock Label(string t) => new() { Text = t, FontSize = 12, Foreground = text2, Margin = new Thickness(0, 4, 0, 6) };
+
+        // Pulsanti principali: contagocce e finestra classica
+        var tools = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 10) };
+        var dropper = new Button { Style = (Style)FindResource("S.Button"), Margin = new Thickness(0, 0, 4, 0), ToolTip = "Pick a color anywhere on the screen" };
+        dropper.Content = GlyphText("", "Eyedropper");
+        dropper.Click += async (_, _) =>
+        {
+            popup.IsOpen = false;
+            // Si aspetta che il flyout sparisca, così non finisce nella fotografia dello schermo.
+            await Task.Delay(180);
+            Color? picked = await Eyedropper.PickAsync();
+            Activate();
+            if (picked is { } p) PickRgb(p, true);
+        };
+        var more = new Button { Style = (Style)FindResource("S.Button"), Margin = new Thickness(4, 0, 0, 0) };
+        more.Content = GlyphText("", "More colors…");
+        more.Click += (_, _) =>
+        {
+            popup.IsOpen = false;
+            Color now = Now();
+            using var dialog = new System.Windows.Forms.ColorDialog
+            {
+                FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(now.R, now.G, now.B),
+                CustomColors = S.RecentColors.Take(16).Select(h => ThemeService.ParseColor(h, Colors.White)).Select(c => c.R | c.G << 8 | c.B << 16).ToArray()
+            };
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            // La finestra dei colori non gestisce la trasparenza: si conserva quella attuale.
+            PickRgb(Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B), true);
+        };
+        tools.Children.Add(dropper);
+        tools.Children.Add(more);
+        root.Children.Add(tools);
+
+        root.Children.Add(Label("Palette"));
+        var palette = new WrapPanel();
+        foreach (string hex in Palette) palette.Children.Add(Swatch(hex, () => PickRgb(ThemeService.ParseColor(hex, Colors.White), true)));
+        root.Children.Add(palette);
+
+        root.Children.Add(Label("Recent colors"));
+        var recent = new WrapPanel();
+        if (S.RecentColors.Count == 0)
+            recent.Children.Add(new TextBlock { Text = "Colors you pick will appear here.", FontSize = 12, Foreground = (Brush)FindResource("S.Text3"), Margin = new Thickness(0, 0, 0, 4) });
+        foreach (string hex in S.RecentColors.ToList())
+            recent.Children.Add(Swatch(hex, () =>
+            {
+                // I recenti si applicano esattamente come salvati (opacità compresa).
+                apply(hex, true);
+                ShowCurrent();
+            }));
+        root.Children.Add(recent);
+
+        root.Children.Add(Label("Opacity"));
+        var alphaRow = new DockPanel();
+        alphaLabel = new TextBlock { Width = 44, TextAlignment = TextAlignment.Right, Foreground = text2, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(alphaLabel, Dock.Right);
+        alpha = new Slider
+        {
+            Style = (Style)FindResource("S.Slider"), Minimum = 0, Maximum = 100, TickFrequency = 1, IsSnapToTickEnabled = true,
+            SmallChange = 1, LargeChange = 10
+        };
+        alpha.ValueChanged += (_, e) =>
+        {
+            alphaLabel.Text = e.NewValue.ToString("0", CultureInfo.InvariantCulture) + "%";
+            if (syncing) return;
+            Color c = Now();
+            apply(ThemeService.ToHex(Color.FromArgb((byte)Math.Round(e.NewValue * 2.55), c.R, c.G, c.B)), false);
+            ShowCurrent();
+        };
+        alphaRow.Children.Add(alphaLabel);
+        alphaRow.Children.Add(alpha);
+        root.Children.Add(alphaRow);
+
+        ShowCurrent();
+        alphaLabel.Text = alpha.Value.ToString("0", CultureInfo.InvariantCulture) + "%";
+
+        popup.Child = new Border
+        {
+            Background = (Brush)FindResource("S.Flyout"), BorderBrush = (Brush)FindResource("S.ControlStroke"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8), Padding = new Thickness(14), Margin = new Thickness(8, 0, 8, 12),
+            Child = root,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 6, Direction = 270, Opacity = 0.28 }
+        };
+        TextElement.SetForeground(popup.Child, (Brush)FindResource("S.Text"));
+        TextElement.SetFontFamily(popup.Child, FontFamily);
+        TextElement.SetFontSize(popup.Child, 14);
+        // Chiudendo il flyout, l'ultimo colore regolato con l'opacità finisce tra i recenti.
+        string opened = current();
+        popup.Closed += (_, _) => { if (!string.Equals(opened, current(), StringComparison.OrdinalIgnoreCase)) AddRecentColor(current()); };
+        popup.IsOpen = true;
+    }
+
+    private FrameworkElement GlyphText(string glyph, string text)
+    {
+        var p = new StackPanel { Orientation = Orientation.Horizontal };
+        p.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        p.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+        return p;
     }
 
     private Button Btn(string text, Action click, bool accent = false)

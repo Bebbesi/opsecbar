@@ -14,6 +14,17 @@ public static class AppPaths
     public static string DataDir { get; } = Init();
     public static string SettingsFile => Path.Combine(DataDir, "settings.json");
     public static string ThemesDir => Path.Combine(DataDir, "themes");
+
+    /// <summary>GIF caricate dall'utente per la barra.</summary>
+    public static string GifsDir
+    {
+        get
+        {
+            string dir = Path.Combine(DataDir, "gifs");
+            try { Directory.CreateDirectory(dir); } catch { }
+            return dir;
+        }
+    }
     public static string LogFile => Path.Combine(DataDir, "opsecbar.log");
     public static string TaskbarStateFile => Path.Combine(DataDir, "taskbar.state");
 

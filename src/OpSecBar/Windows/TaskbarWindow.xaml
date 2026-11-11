@@ -62,29 +62,65 @@
             </Border>
         </Grid>
 
-        <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp">
+        <!-- La barra accetta file .gif trascinati da Esplora file: vengono aggiunti alle GIF della barra -->
+        <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp" AllowDrop="True" Drop="Bar_Drop" DragOver="Bar_DragOver">
             <Grid x:Name="LayoutGrid" Margin="6,0">
-                <!-- SINISTRA: solo icone delle app -->
-                <ScrollViewer x:Name="TasksScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                              Focusable="False" PreviewMouseWheel="TasksScroll_Wheel">
-                    <ItemsControl x:Name="TaskItems" ItemTemplate="{StaticResource TaskItemTemplate}" Focusable="False">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="{Binding Orientation, RelativeSource={RelativeSource AncestorType=Window}}" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </ScrollViewer>
+                <!-- SINISTRA: GIF (opzionali) + icone delle app -->
+                <DockPanel x:Name="LeftDock" LastChildFill="True">
+                    <StackPanel x:Name="LeftGifHost" DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" />
+                    <ScrollViewer x:Name="TasksScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                                  Focusable="False" PreviewMouseWheel="TasksScroll_Wheel">
+                        <ItemsControl x:Name="TaskItems" ItemTemplate="{StaticResource TaskItemTemplate}" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="{Binding Orientation, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
 
-                <!-- CENTRO: spazio libero + widget (player musicale opzionale) -->
+                <!-- CENTRO: spazio libero + widget (player musicale opzionale, GIF) -->
                 <StackPanel x:Name="CenterPanel" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <c:MediaWidget x:Name="Media" />
                 </StackPanel>
 
-                <!-- DESTRA: info di sistema, orologio, tray, impostazioni rapide, Start -->
+                <!-- DESTRA: info di sistema, volume, orologio, tray, impostazioni rapide, Start -->
                 <StackPanel x:Name="RightPanel" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <StackPanel x:Name="RightGifHost" Orientation="Horizontal" VerticalAlignment="Center" />
+
                     <TextBlock x:Name="SysInfoText" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="8,0"
                                Foreground="{DynamicResource FgDimBrush}" TextAlignment="Center" />
+
+                    <Button x:Name="VolumeButton" Style="{StaticResource BarButton}" Padding="7,0" Click="Volume_Click"
+                            PreviewMouseWheel="Volume_Wheel" MouseRightButtonUp="Volume_RightUp" ToolTip="Volume">
+                        <StackPanel x:Name="VolumePanel" Orientation="Horizontal">
+                            <TextBlock x:Name="VolumeGlyph" Style="{StaticResource Glyph}" Text="&#xE995;" FontSize="14" />
+                            <TextBlock x:Name="VolumeText" Margin="5,0,0,0" VerticalAlignment="Center" TextAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Popup x:Name="VolumeFlyout" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
+                           PlacementTarget="{Binding ElementName=VolumeButton}" Opened="VolumeFlyout_Opened" Closed="VolumeFlyout_Closed">
+                        <Border Style="{StaticResource FlyoutBorder}" Padding="10,8" TextElement.Foreground="{DynamicResource PanelFgBrush}"
+                                TextElement.FontFamily="{DynamicResource BarFont}">
+                            <StackPanel Width="250">
+                                <DockPanel>
+                                    <Button x:Name="MuteButton" Style="{StaticResource PanelButton}" Padding="8" Click="Mute_Click" ToolTip="Mute">
+                                        <TextBlock x:Name="MuteGlyph" Style="{StaticResource Glyph}" Text="&#xE995;" FontSize="16" />
+                                    </Button>
+                                    <TextBlock x:Name="VolumeValue" DockPanel.Dock="Right" Width="38" TextAlignment="Right" VerticalAlignment="Center" FontSize="13" />
+                                    <Slider x:Name="VolumeSlider" Style="{StaticResource SeekSlider}" Minimum="0" Maximum="100" Margin="8,0,4,0"
+                                            VerticalAlignment="Center" ValueChanged="VolumeSlider_ValueChanged" />
+                                </DockPanel>
+                                <Button Style="{StaticResource PanelButton}" Padding="8,6" Margin="0,4,0,0" HorizontalAlignment="Left" Click="SoundSettings_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Glyph}" Text="&#xE713;" FontSize="13" Margin="0,0,8,0" />
+                                        <TextBlock Text="Sound settings" FontSize="12.5" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
 
                     <Button x:Name="ClockButton" Style="{StaticResource BarButton}" Click="Clock_Click"
                             ToolTip="Notifications and calendar">

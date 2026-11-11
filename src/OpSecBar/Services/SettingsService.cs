@@ -40,6 +40,8 @@ public sealed class SettingsService
                     s.Theme ??= ThemeService.Presets[0].Clone();
                     s.PinnedApps ??= new();
                     s.StartFavorites ??= new();
+                    s.RecentColors ??= new();
+                    s.Gifs ??= new();
                     return s;
                 }
             }

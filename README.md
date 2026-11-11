@@ -33,8 +33,10 @@ original taskbar automatically in every situation: normal exit, crash, or being 
 - **Its own Start menu**, also opened by the Windows key.
 - **Built-in media player** (Spotify, browsers, VLC…) through the Windows media controls.
 - **Real system tray**, including a panel for hidden icons.
-- **Full customization**: colors, opacity, blur / acrylic / glass, corners, margins, fonts, position, multiple monitors.
-- **Themes**: built-in and custom, importable and exportable as `.json`.
+- **Full customization**: colors (with an eyedropper and recent colors), gradients, opacity, blur / acrylic / glass, corners, margins, borders, neon glow, fonts, position, multiple monitors.
+- **Styled widgets**: clock, date and volume with their own colors, fonts and formats.
+- **Animated GIFs** on the bar: drop them in Settings or straight onto the bar.
+- **Themes**: 25 built-in (Cyberpunk, Lofi, Soft, Gaming, Synthwave…) and custom, importable and exportable as `.json`.
 - **Lightweight**: built to run all day with a small memory footprint.
 
 ## Requirements
@@ -95,8 +97,8 @@ Optional, based on the Windows media controls: cover art, title, artist, previou
 Click it to expand it with a progress bar.
 
 ### Right: system
-- Clock with date.
-- Real system tray: visible icons plus a panel for hidden icons; left and right clicks are forwarded to the apps.
+- Clock with date (custom formats, colors and fonts) and a volume widget: click for a slider, scroll to change it, right-click to mute.
+- Real system tray: visible icons plus a panel for hidden icons; left and right clicks are forwarded to the apps. Drag an icon out of the hidden panel onto the bar to keep it visible, along the bar to reorder it, or off the bar to hide it again.
 - Windows quick settings and the Start button.
 - Optional: CPU / RAM / battery.
 
@@ -107,17 +109,21 @@ It opens from the Start button **and from the Windows key**; other shortcuts (Wi
 ### Settings
 | Page | Options |
 | --- | --- |
-| Appearance | color, opacity, blur / acrylic / glass / transparent, corners, border, shadow, font |
+| Appearance | color and gradient, opacity, blur / acrylic / glass / transparent, corners, border (sides, gradient), shadow or neon glow, font. Every color picker has an eyedropper, a palette and recent colors |
 | Themes | built-in and custom themes, save / import / export |
 | Behavior | position (top / bottom / left / right), always visible or auto-hide, full-screen handling, multiple monitors, layout (height, margin for a floating bar, icon size and spacing) |
 | Taskbar items | turn each part of the bar on or off individually |
 | Pinned apps | manage the favorites shown in the bar |
 | System tray | choose which tray icons are always visible |
 | Start menu | Start menu options |
+| Widgets | clock, date and volume: formats, colors, fonts, background pill |
+| GIFs | upload area for animated GIFs, position and size on the bar |
 | System | start with Windows, about |
 
 ### Themes
-Windows 11 Minimal, Glassmorphism, macOS Inspired, Transparent, Dark, Light, Terminal, Custom.
+Windows 11 Minimal, Glassmorphism, macOS Inspired, Transparent, Dark, Light, Terminal, Cyberpunk, Lofi, Soft, Gaming,
+Synthwave, Vaporwave, Matrix, Nord, Dracula, Sakura, Ocean, Forest, Sunset, Retro Amber, Coffee, Monochrome, Pastel Pop,
+Neon Arcade, Custom.
 You can save your own themes, and import or export them as `.json`.
 
 ### Updates
@@ -150,6 +156,7 @@ If anything goes wrong, run `scripts\Restore-Taskbar.cmd` or press `Ctrl + Alt +
 | Installed program | `%LocalAppData%\Programs\OpSecBar` |
 | Settings (saved automatically) | `%AppData%\OpSecBar\settings.json` |
 | Custom themes | `%AppData%\OpSecBar\themes` |
+| Uploaded GIFs | `%AppData%\OpSecBar\gifs` |
 | Log | `%AppData%\OpSecBar\opsecbar.log` |
 
 Uninstalling leaves settings and themes in `%AppData%\OpSecBar`; delete them manually if you don't need them.

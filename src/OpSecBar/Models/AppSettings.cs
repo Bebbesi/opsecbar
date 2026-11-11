@@ -7,6 +7,10 @@ namespace OpSecBar.Models;
 public enum BarPosition { Top, Bottom, Left, Right }
 public enum BarBehavior { AlwaysVisible, AutoHide }
 public enum BackdropMode { Solid, Transparent, Blur, Acrylic, Glass }
+/// <summary>Su quali lati disegnare il bordo della barra.</summary>
+public enum BorderSides { All, DesktopSide, ScreenSide }
+/// <summary>Dove compaiono le GIF sulla barra.</summary>
+public enum GifPlacement { Left, Center, Right }
 
 /// <summary>Tutti i parametri grafici della barra. Un "tema" è semplicemente un'istanza di questa classe.</summary>
 public class ThemeData : ObservableObject
@@ -29,6 +33,15 @@ public class ThemeData : ObservableObject
     private bool _shadow;
     private double _borderThickness;
     private string _borderColor = "#33FFFFFF";
+    private string _borderColor2 = "";
+    private BorderSides _borderSides = BorderSides.All;
+    private string _backgroundColor2 = "";
+    private string _shadowColor = "#000000";
+    private double _shadowSize = 16;
+    private bool _shadowGlow;
+    private string _clockColor = "", _clockFont = "", _dateColor = "", _volumeColor = "", _widgetBackground = "";
+    private double _clockFontSize, _widgetRadius = 6;
+    private bool _clockBold = true;
 
     public string Name { get => _name; set => Set(ref _name, value); }
     public BackdropMode Backdrop { get => _backdrop; set => Set(ref _backdrop, value); }
@@ -50,8 +63,38 @@ public class ThemeData : ObservableObject
     public bool Shadow { get => _shadow; set => Set(ref _shadow, value); }
     public double BorderThickness { get => _borderThickness; set => Set(ref _borderThickness, value); }
     public string BorderColor { get => _borderColor; set => Set(ref _borderColor, value); }
+    /// <summary>Secondo colore del bordo: se impostato il bordo diventa una sfumatura (vuoto = tinta unita).</summary>
+    public string BorderColor2 { get => _borderColor2; set => Set(ref _borderColor2, value); }
+    public BorderSides BorderSides { get => _borderSides; set => Set(ref _borderSides, value); }
+    /// <summary>Secondo colore dello sfondo: se impostato lo sfondo diventa una sfumatura (vuoto = tinta unita).</summary>
+    public string BackgroundColor2 { get => _backgroundColor2; set => Set(ref _backgroundColor2, value); }
+    public string ShadowColor { get => _shadowColor; set => Set(ref _shadowColor, value); }
+    public double ShadowSize { get => _shadowSize; set => Set(ref _shadowSize, value); }
+    /// <summary>Ombra centrata attorno alla barra (effetto "neon") invece che proiettata verso il basso.</summary>
+    public bool ShadowGlow { get => _shadowGlow; set => Set(ref _shadowGlow, value); }
+
+    // Widget: orologio, data (calendario), volume. Colori vuoti = colore del testo della barra.
+    public string ClockColor { get => _clockColor; set => Set(ref _clockColor, value); }
+    /// <summary>Font dell'orologio (vuoto = font della barra).</summary>
+    public string ClockFont { get => _clockFont; set => Set(ref _clockFont, value); }
+    /// <summary>Dimensione del testo dell'orologio (0 = come la barra).</summary>
+    public double ClockFontSize { get => _clockFontSize; set => Set(ref _clockFontSize, value); }
+    public bool ClockBold { get => _clockBold; set => Set(ref _clockBold, value); }
+    public string DateColor { get => _dateColor; set => Set(ref _dateColor, value); }
+    public string VolumeColor { get => _volumeColor; set => Set(ref _volumeColor, value); }
+    /// <summary>Sfondo "a pillola" dietro orologio e volume (vuoto = nessuno).</summary>
+    public string WidgetBackground { get => _widgetBackground; set => Set(ref _widgetBackground, value); }
+    public double WidgetRadius { get => _widgetRadius; set => Set(ref _widgetRadius, value); }
 
     public ThemeData Clone() => JsonSerializer.Deserialize<ThemeData>(JsonSerializer.Serialize(this, JsonOptions.Default), JsonOptions.Default)!;
+}
+
+/// <summary>Una GIF caricata dall'utente e mostrata sulla barra.</summary>
+public class GifItem
+{
+    /// <summary>Nome del file dentro la cartella "gifs" dei dati dell'app.</summary>
+    public string File { get; set; } = "";
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>Un'app fissata sulla barra o tra i preferiti del menu Start.</summary>
@@ -79,6 +122,10 @@ public class AppSettings : ObservableObject
     private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _useWinKey = true;
+    private string _clockFormat = "", _dateFormat = "";
+    private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
+    private double _gifSize;
+    private GifPlacement _gifPlacement = GifPlacement.Center;
 
     public ThemeData Theme { get => _theme; set => Set(ref _theme, value); }
 
@@ -103,6 +150,19 @@ public class AppSettings : ObservableObject
     public bool ShowPinnedApps { get => _showPinnedApps; set => Set(ref _showPinnedApps, value); }
     public bool GroupWindows { get => _groupWindows; set => Set(ref _groupWindows, value); }
 
+    // Widget
+    /// <summary>Formato .NET personalizzato dell'ora (vuoto = automatico da 24h/secondi).</summary>
+    public string ClockFormat { get => _clockFormat; set => Set(ref _clockFormat, value); }
+    /// <summary>Formato .NET personalizzato della data (vuoto = "ddd d MMM").</summary>
+    public string DateFormat { get => _dateFormat; set => Set(ref _dateFormat, value); }
+    /// <summary>Data sotto l'ora (su due righe) invece che accanto.</summary>
+    public bool DateBelowTime { get => _dateBelowTime; set => Set(ref _dateBelowTime, value); }
+    public bool ShowVolume { get => _showVolume; set => Set(ref _showVolume, value); }
+    public bool ShowVolumePercent { get => _showVolumePercent; set => Set(ref _showVolumePercent, value); }
+    /// <summary>Altezza delle GIF in px (0 = automatica, in base all'altezza della barra).</summary>
+    public double GifSize { get => _gifSize; set => Set(ref _gifSize, value); }
+    public GifPlacement GifPlacement { get => _gifPlacement; set => Set(ref _gifPlacement, value); }
+
     // Sistema
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool HideWindowsTaskbar { get => _hideWindowsTaskbar; set => Set(ref _hideWindowsTaskbar, value); }
@@ -121,6 +181,9 @@ public class AppSettings : ObservableObject
     public List<PinnedApp> StartFavorites { get; set; } = new();
     /// <summary>Icone del tray sempre visibili. Null = predefinite di Windows (rete, audio, batteria...).</summary>
     public string[]? PinnedTrayIcons { get; set; }
+    /// <summary>Ultimi colori scelti nel selettore (il più recente per primo).</summary>
+    public List<string> RecentColors { get; set; } = new();
+    public List<GifItem> Gifs { get; set; } = new();
 }
 
 public static class JsonOptions
