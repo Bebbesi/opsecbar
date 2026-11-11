@@ -47,6 +47,12 @@ original taskbar automatically in every situation: normal exit, crash, or being 
 
 ## Quick start
 
+**Just want to use it?** Download `OpSecBar-Setup.exe` from the
+[latest release](https://github.com/Bebbesi/opsecbar/releases/latest) and run it. It installs for the current user,
+needs no administrator rights and includes the .NET runtime. Uninstall from *Windows Settings → Apps*.
+
+To build from source:
+
 ```powershell
 .\scripts\publish.ps1        # builds into dist\OpSecBar
 .\scripts\install.ps1        # copies to %LocalAppData%\Programs\OpSecBar, creates a shortcut and starts it
@@ -123,7 +129,7 @@ To publish a release, set `<Version>` in `src/OpSecBar/OpSecBar.csproj`, commit,
 
 ```powershell
 git tag v1.2.0
-git push origin v1.2.0      # the Release workflow builds and attaches OpSecBar-win-x64.zip
+git push origin v1.2.0      # the Release workflow builds OpSecBar-Setup.exe and OpSecBar-win-x64.zip
 ```
 
 ## Safety of the original taskbar
