@@ -48,6 +48,8 @@ public partial class App : Application
             // Già in esecuzione: chiedi all'istanza attiva di aprire le Impostazioni.
             if (EventWaitHandle.TryOpenExisting(Program.ShowSettingsEventName, out EventWaitHandle? ev))
             {
+                // Questa istanza è quella appena lanciata dall'utente: cede all'altra il diritto di andare in primo piano.
+                Native.AllowSetForegroundWindow(Native.ASFW_ANY);
                 ev.Set();
                 ev.Dispose();
             }
@@ -264,7 +266,14 @@ public partial class App : Application
         if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
         _settingsWindow.Activate();
         // Se la richiesta arriva da una seconda istanza, Windows non porterebbe la finestra in primo piano.
-        Native.ForceForeground(new WindowInteropHelper(_settingsWindow).Handle);
+        IntPtr handle = new WindowInteropHelper(_settingsWindow).Handle;
+        Native.ForceForeground(handle);
+        if (Native.GetForegroundWindow() != handle)
+        {
+            // Se Windows nega comunque il primo piano, almeno la finestra sale sopra le altre.
+            _settingsWindow.Topmost = true;
+            _settingsWindow.Topmost = false;
+        }
     }
 
     public void ToggleStartMenu(TaskbarWindow bar, FrameworkElement anchor)

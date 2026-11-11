@@ -328,7 +328,7 @@ public partial class SettingsWindow : Window
             {
                 Margin = new Thickness(0, 0, 12, 12), Cursor = Cursors.Hand, Content = body, ToolTip = active ? null : "Apply " + theme.Name,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch, FocusVisualStyle = (Style)FindResource("S.Focus"),
-                Template = TileTemplate(active)
+                Foreground = (Brush)FindResource("S.Text"), Template = TileTemplate(active)
             };
             if (!unsaved)
                 tile.Click += (_, _) => Safe(() =>
@@ -376,8 +376,8 @@ public partial class SettingsWindow : Window
         {
             Height = 92, CornerRadius = new CornerRadius(5, 5, 0, 0), ClipToBounds = true,
             Background = new LinearGradientBrush(
-                _dark ? Color.FromRgb(0x4A, 0x50, 0x59) : Color.FromRgb(0xC9, 0xD0, 0xDA),
-                _dark ? Color.FromRgb(0x2A, 0x2D, 0x33) : Color.FromRgb(0xAE, 0xB7, 0xC3), 90)
+                _dark ? Color.FromRgb(0x6B, 0x6B, 0x6B) : Color.FromRgb(0xD9, 0xD9, 0xD9),
+                _dark ? Color.FromRgb(0x47, 0x47, 0x47) : Color.FromRgb(0xBD, 0xBD, 0xBD), 90)
         };
 
         var content = new Grid { Margin = new Thickness(5, 0, 5, 0) };
@@ -515,8 +515,9 @@ public partial class SettingsWindow : Window
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = app.Name, TextTrimming = TextTrimming.CharacterEllipsis });
-        string? detail = app.TargetPath ?? app.AppId;
-        if (!string.IsNullOrEmpty(detail))
+        // Solo i veri percorsi di file sono utili da leggere (non gli identificativi interni della shell).
+        string? detail = app.TargetPath;
+        if (!string.IsNullOrEmpty(detail) && System.IO.Path.IsPathFullyQualified(detail))
             text.Children.Add(new TextBlock
             {
                 Text = detail, FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 0)

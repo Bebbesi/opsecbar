@@ -13,7 +13,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root "dist\OpSecBar"
 $target = Join-Path $env:LOCALAPPDATA "Programs\OpSecBar"
 $exe = Join-Path $target "OpSecBar.exe"
-$shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "OpSecBar.lnk"
+$shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "OpSec Bar.lnk"
 
 function Stop-OpSecBar {
     $running = Get-Process OpSecBar -ErrorAction SilentlyContinue
@@ -43,7 +43,7 @@ $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($shortcut)
 $link.TargetPath = $exe
 $link.WorkingDirectory = $target
-$link.Description = "Taskbar alternativa per Windows"
+$link.Description = "OpSec Bar - alternative taskbar for Windows"
 $link.Save()
 
 Start-Process $exe

@@ -55,7 +55,19 @@ internal static class Native
             AttachThreadInput(current, other, false);
         }
         else SetForegroundWindow(hWnd);
+
+        if (GetForegroundWindow() == hWnd) return;
+        // Ultima risorsa: un tocco del tasto Alt sblocca il cambio di primo piano imposto da Windows.
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(hWnd);
     }
+
+    [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+    /// <summary>Consente a un altro processo (la prima istanza) di portare le proprie finestre in primo piano.</summary>
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int processId);
+    public const int ASFW_ANY = -1;
 
     public const int SW_HIDE = 0, SW_SHOWNA = 8;
     public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
