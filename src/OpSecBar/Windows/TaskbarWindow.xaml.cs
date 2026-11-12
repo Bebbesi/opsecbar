@@ -34,6 +34,13 @@ public partial class TaskbarWindow : AppBarWindow
     private bool _hiddenByAutoHide, _shapeUpdatePending;
     private BackdropWindow? _backdrop;
 
+    // Anteprime delle finestre al passaggio del mouse
+    private readonly DispatcherTimer _previewShowTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+    private readonly DispatcherTimer _previewHideTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private TaskPreviewWindow? _preview;
+    private AppItem? _previewItem, _hoverItem;
+    private FrameworkElement? _hoverElement;
+
     public TaskbarWindow(App app, AppBarScreen screen)
         : base(app.Shell.AppBarManager, app.Shell.ExplorerHelper, app.Shell.FullScreenHelper, screen,
             ToEdge(app.Settings.Position),
@@ -70,8 +77,19 @@ public partial class TaskbarWindow : AppBarWindow
         // intero la si rimette in fondo.
         ContentRendered += (_, _) => { if (!Topmost && Handle != IntPtr.Zero) WindowHelper.ShowWindowBottomMost(Handle); };
         IsVisibleChanged += (_, _) => ScheduleShapeUpdate();
+        _previewShowTimer.Tick += (_, _) =>
+        {
+            _previewShowTimer.Stop();
+            if (_hoverItem != null && _hoverElement != null) ShowPreview(_hoverItem, _hoverElement);
+        };
+        _previewHideTimer.Tick += (_, _) =>
+        {
+            _previewHideTimer.Stop();
+            HidePreview();
+        };
         Closed += (_, _) =>
         {
+            HidePreview();
             _clock.Stop();
             _app.SysInfo.Updated -= UpdateSysInfo;
             _app.Audio.Changed -= UpdateVolume;
@@ -901,8 +919,68 @@ public partial class TaskbarWindow : AppBarWindow
         catch (Exception ex) { Log.Warn("Animazione icona: " + ex.Message); }
     }
 
+    // ---- Anteprime delle finestre ----------------------------------------------------------------
+
+    private void Task_Enter(object sender, MouseEventArgs e)
+    {
+        if (sender is not FrameworkElement element || ItemOf(sender) is not { } item) return;
+        _hoverItem = item;
+        _hoverElement = element;
+        _previewHideTimer.Stop();
+
+        bool previews = _s.ShowWindowPreviews && item.Windows.Count > 0;
+        // Con l'anteprima il tooltip col titolo sarebbe un doppione (e le finirebbe sopra).
+        ToolTipService.SetIsEnabled(element, !previews);
+        if (!previews)
+        {
+            _previewShowTimer.Stop();
+            if (_preview != null) _previewHideTimer.Start();
+            return;
+        }
+
+        if (_preview != null) ShowPreview(item, element); // già aperta: si passa subito all'altra app
+        else _previewShowTimer.Start();
+    }
+
+    private void ShowPreview(AppItem item, FrameworkElement anchor)
+    {
+        if (ReferenceEquals(item, _previewItem) && _preview != null) return;
+        HidePreview();
+        if (item.Windows.Count == 0 || !anchor.IsLoaded || _pressedItem != null) return;
+        try
+        {
+            var preview = new TaskPreviewWindow(item.Windows.ToList(), anchor, Handle, PopupPlacement);
+            preview.MouseEnter += (_, _) => _previewHideTimer.Stop();
+            preview.MouseLeave += (_, _) => _previewHideTimer.Start();
+            preview.Dismissed += HidePreview;
+            _preview = preview;
+            _previewItem = item;
+            OnPopupStateChanged(true); // niente auto-hide della barra mentre l'anteprima è aperta
+            preview.Show();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Anteprima finestre", ex);
+            HidePreview();
+        }
+    }
+
+    private void HidePreview()
+    {
+        _previewShowTimer.Stop();
+        _previewHideTimer.Stop();
+        if (_preview == null) return;
+        var preview = _preview;
+        _preview = null;
+        _previewItem = null;
+        preview.Dismissed -= HidePreview;
+        try { preview.Close(); } catch (Exception ex) { Log.Warn("Chiusura anteprima: " + ex.Message); }
+        OnPopupStateChanged(false);
+    }
+
     private void Task_Down(object sender, MouseButtonEventArgs e)
     {
+        HidePreview();
         // Lo stato va letto ORA: al rilascio la nostra barra sarà la finestra attiva.
         _pressedItem = ItemOf(sender);
         _pressedWasActive = _pressedItem?.IsActive == true;
@@ -912,6 +990,14 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Task_Leave(object sender, MouseEventArgs e)
     {
+        if (ReferenceEquals(sender, _hoverElement))
+        {
+            _hoverItem = null;
+            _hoverElement = null;
+        }
+        _previewShowTimer.Stop();
+        if (_preview != null) _previewHideTimer.Start();
+
         if (_pressedItem != null && ReferenceEquals(_pressedItem, ItemOf(sender)))
         {
             if (TaskListService.DebugEnabled) Log.Info($"[leave] item={_pressedItem.Key} (pressione annullata)");
@@ -981,6 +1067,7 @@ public partial class TaskbarWindow : AppBarWindow
     {
         if (ItemOf(sender) is not { } item) return;
         e.Handled = true;
+        HidePreview();
         var tasks = _app.TaskList;
         var menu = new ContextMenu();
 

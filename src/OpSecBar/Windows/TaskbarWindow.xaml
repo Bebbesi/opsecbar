@@ -12,7 +12,7 @@
         <DataTemplate x:Key="TaskItemTemplate">
             <Grid x:Name="Root" Margin="{DynamicResource BarIconSpacing}" Background="Transparent" Opacity="0"
                   ToolTip="{Binding Title}" ToolTipService.InitialShowDelay="450"
-                  PreviewMouseLeftButtonDown="Task_Down" MouseLeftButtonUp="Task_Up" MouseLeave="Task_Leave"
+                  PreviewMouseLeftButtonDown="Task_Down" MouseLeftButtonUp="Task_Up" MouseEnter="Task_Enter" MouseLeave="Task_Leave"
                   MouseRightButtonUp="Task_RightUp" MouseDown="Task_MouseDown">
                 <Border x:Name="Hover" CornerRadius="7" Background="Transparent" />
                 <Image x:Name="Icon" Source="{Binding Icon}" Width="{DynamicResource BarIconSize}" Height="{DynamicResource BarIconSize}"

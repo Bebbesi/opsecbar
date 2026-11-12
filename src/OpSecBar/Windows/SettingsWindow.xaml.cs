@@ -518,6 +518,7 @@ public partial class SettingsWindow : Window
         Row(apps, "Pinned apps", null, Toggle(S.ShowPinnedApps, v => S.ShowPinnedApps = v));
         Row(apps, "Running apps", null, Toggle(S.ShowRunningApps, v => S.ShowRunningApps = v));
         Row(apps, "Combine windows of the same app", "One icon per app. Clicking it lists the open windows.", Toggle(S.GroupWindows, v => S.GroupWindows = v));
+        Row(apps, "Window previews", "Hover an app to see its windows. Hover a preview to peek at that window.", Toggle(S.ShowWindowPreviews, v => S.ShowWindowPreviews = v));
 
         var media = Section("Media");
         Row(media, "Media player", "Appears only while something is playing.", Toggle(S.ShowMediaPlayer, v => S.ShowMediaPlayer = v));

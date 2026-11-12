@@ -314,6 +314,7 @@ public partial class App : Application
                     CheckForUpdates(Settings.AutoUpdate, restart: false);
                     break;
                 case nameof(AppSettings.AutoUpdate):
+                case nameof(AppSettings.ShowWindowPreviews): // letto al passaggio del mouse
                 case nameof(AppSettings.RecentColors):
                 case nameof(AppSettings.PinnedTrayIcons):
                     break; // solo da salvare

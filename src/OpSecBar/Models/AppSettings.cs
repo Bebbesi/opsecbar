@@ -182,7 +182,7 @@ public class AppSettings : ObservableObject
     private bool _hideOnFullscreen = true, _allMonitors = true;
     private bool _showMediaPlayer = true, _showMediaTitle = true, _showClock = true, _showDate = true, _showSeconds;
     private bool _clock24h = true, _showTray = true, _showQuickSettings = true, _showStartButton = true, _showSysInfo;
-    private bool _showRunningApps = true, _showPinnedApps = true, _groupWindows = true;
+    private bool _showRunningApps = true, _showPinnedApps = true, _groupWindows = true, _showWindowPreviews = true;
     private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true, _preReleaseUpdates;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _useWinKey = true;
@@ -214,6 +214,8 @@ public class AppSettings : ObservableObject
     public bool ShowRunningApps { get => _showRunningApps; set => Set(ref _showRunningApps, value); }
     public bool ShowPinnedApps { get => _showPinnedApps; set => Set(ref _showPinnedApps, value); }
     public bool GroupWindows { get => _groupWindows; set => Set(ref _groupWindows, value); }
+    /// <summary>Anteprime delle finestre al passaggio del mouse sulle icone (e "sbirciata" a tutto schermo).</summary>
+    public bool ShowWindowPreviews { get => _showWindowPreviews; set => Set(ref _showWindowPreviews, value); }
 
     // Widget
     /// <summary>Formato .NET personalizzato dell'ora (vuoto = automatico da 24h/secondi).</summary>
