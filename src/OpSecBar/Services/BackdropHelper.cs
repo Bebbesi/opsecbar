@@ -10,6 +10,17 @@ public static class BackdropHelper
 {
     private static readonly bool ClassicBlurBroken = Environment.OSVersion.Version.Build >= 22621;
 
+    /// <summary>
+    /// Da Windows 11 24H2 l'acrylic ignora la regione della finestra: il ritaglio arrotondato schiarisce solo l'interno
+    /// e negli angoli resta un quadrato sfocato. Il blur "classico" invece sfoca di nuovo e rispetta la regione,
+    /// quindi con gli angoli arrotondati si usa quello (senza tinta: il colore lo disegna la barra).
+    /// </summary>
+    private static readonly bool ClassicBlurForRounded = Environment.OSVersion.Version.Build >= 26100;
+
+    /// <summary>True se, con questi angoli, Windows non applica la tinta e il colore va disegnato dalla finestra sopra la lastra.</summary>
+    public static bool TintDrawnByWindow(BackdropMode mode, bool rounded) =>
+        mode != BackdropMode.Acrylic || (rounded && ClassicBlurForRounded);
+
     public static bool UsesCompositionBlur(BackdropMode mode) =>
         mode is BackdropMode.Blur or BackdropMode.Acrylic or BackdropMode.Glass;
 
@@ -36,12 +47,15 @@ public static class BackdropHelper
     public static bool BlurActive(BackdropMode mode) => UsesCompositionBlur(mode) && SystemTransparencyEnabled;
 
     /// <summary>Applica (o rimuove) l'effetto di composizione dietro la finestra.</summary>
-    public static void Apply(IntPtr hwnd, BackdropMode mode, Color tint, double opacity, bool enabled = true)
+    /// <param name="rounded">True se la finestra verrà ritagliata con una regione ad angoli arrotondati.</param>
+    public static void Apply(IntPtr hwnd, BackdropMode mode, Color tint, double opacity, bool enabled = true, bool rounded = false)
     {
         if (hwnd == IntPtr.Zero) return;
 
         var policy = new Native.AccentPolicy { AccentState = Native.AccentState.Disabled };
-        if (enabled)
+        if (enabled && rounded && ClassicBlurForRounded)
+            policy.AccentState = Native.AccentState.BlurBehind;
+        else if (enabled)
         {
             switch (mode)
             {

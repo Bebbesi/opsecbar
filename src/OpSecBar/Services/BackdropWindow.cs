@@ -17,7 +17,7 @@ public sealed class BackdropWindow : IDisposable
 
     private IntPtr _hwnd;
     private (int X, int Y, int W, int H, int R) _lastShape;
-    private (BackdropMode Mode, Color Tint, double Opacity) _lastAccent;
+    private (BackdropMode Mode, Color Tint, double Opacity, bool Rounded) _lastAccent;
     private bool _visible;
 
     /// <summary>Mostra/aggiorna la lastra subito sotto la finestra <paramref name="above"/>. Coordinate in pixel fisici.</summary>
@@ -43,10 +43,10 @@ public sealed class BackdropWindow : IDisposable
             _lastAccent = default;
         }
 
-        var accent = (mode, tint, opacity);
+        var accent = (mode, tint, opacity, radius > 0);
         if (accent != _lastAccent)
         {
-            BackdropHelper.Apply(_hwnd, mode, tint, opacity);
+            BackdropHelper.Apply(_hwnd, mode, tint, opacity, rounded: radius > 0);
             _lastAccent = accent;
         }
 

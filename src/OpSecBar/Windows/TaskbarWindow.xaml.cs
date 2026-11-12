@@ -235,8 +235,10 @@ public partial class TaskbarWindow : AppBarWindow
         BarBorder.Background = t.Backdrop switch
         {
             BackdropMode.Transparent => new SolidColorBrush(hitTestOnly),
-            // Con l'acrylic il colore lo mette Windows; se la trasparenza di sistema è spenta lo disegna la barra.
-            BackdropMode.Acrylic when blurActive => new SolidColorBrush(hitTestOnly),
+            // Con l'acrylic il colore lo mette Windows; se la trasparenza di sistema è spenta, o se gli angoli
+            // arrotondati obbligano al blur classico (senza tinta), lo disegna la barra.
+            BackdropMode.Acrylic when blurActive && !BackdropHelper.TintDrawnByWindow(t.Backdrop, BackdropRadiusPx() > 0)
+                => new SolidColorBrush(hitTestOnly),
             BackdropMode.Glass when hasBg2 => new LinearGradientBrush(
                 ThemeService.WithAlpha(bg, Math.Min(1, opacity * 1.35)),
                 ThemeService.WithAlpha(bg2, opacity * 0.6), angle),
@@ -316,13 +318,12 @@ public partial class TaskbarWindow : AppBarWindow
         {
             if (blur)
             {
-                var source = PresentationSource.FromVisual(BarBorder);
-                double scale = source?.CompositionTarget?.TransformToDevice.M11 ?? (DpiScale > 0 ? DpiScale : 1);
+                double scale = DeviceScale();
                 Point origin = BarBorder.PointToScreen(new Point(0, 0));
                 _backdrop ??= new BackdropWindow();
                 _backdrop.Show(Handle, (int)Math.Round(origin.X), (int)Math.Round(origin.Y),
                     (int)Math.Round(BarBorder.ActualWidth * scale), (int)Math.Round(BarBorder.ActualHeight * scale),
-                    (int)Math.Round(Math.Clamp(t.CornerRadius, 0, 48) * scale), t.Backdrop, bg, t.Opacity);
+                    BackdropRadiusPx(), t.Backdrop, bg, t.Opacity);
             }
             else _backdrop?.Hide();
 
@@ -337,6 +338,12 @@ public partial class TaskbarWindow : AppBarWindow
         }
         catch (Exception ex) { Log.Error("UpdateShape", ex); }
     }
+
+    private double DeviceScale() =>
+        PresentationSource.FromVisual(BarBorder)?.CompositionTarget?.TransformToDevice.M11 ?? (DpiScale > 0 ? DpiScale : 1);
+
+    /// <summary>Raggio degli angoli della lastra sfocata, in pixel fisici.</summary>
+    private int BackdropRadiusPx() => (int)Math.Round(Math.Clamp(_s.Theme.CornerRadius, 0, 48) * DeviceScale());
 
     // ---- Comportamento AppBar --------------------------------------------------------------------
 
