@@ -51,7 +51,8 @@ original taskbar automatically in every situation: normal exit, crash, or being 
 
 **Just want to use it?** Download `OpSecBar-Setup.exe` from the
 [latest release](https://github.com/Bebbesi/opsecbar/releases/latest) and run it. It installs for the current user,
-needs no administrator rights and includes the .NET runtime. Uninstall from *Windows Settings → Apps*.
+needs no administrator rights and includes the .NET runtime. Setup asks whether OpSec Bar should start when you sign
+in to Windows; you can change it later in *Settings → System*. Uninstall from *Windows Settings → Apps*.
 
 To build from source:
 

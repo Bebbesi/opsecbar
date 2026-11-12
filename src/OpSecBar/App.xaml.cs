@@ -93,7 +93,8 @@ public partial class App : Application
 
             SettingsService = new SettingsService();
             ThemeService.ApplyResources(Settings.Theme);
-            AutoStartService.Sync(Settings.AutoStart);
+            // L'installer può aver attivato o disattivato l'avvio automatico: l'impostazione segue la voce Run.
+            Settings.AutoStart = AutoStartService.Sync(Settings.AutoStart);
 
             ShellConfig config = ShellManager.DefaultShellConfig;
             config.EnableTasksService = true;

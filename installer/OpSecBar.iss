@@ -28,6 +28,11 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
+; The "start when I sign in" checkbox follows the current Run entry on upgrades (see CurPageChanged), not the last setup run.
+UsePreviousTasks=no
+
+[Tasks]
+Name: "autostart"; Description: "Start OpSec Bar automatically when I sign in to Windows"; GroupDescription: "Startup:"
 
 [Files]
 Source: "..\dist\OpSecBar\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -43,10 +48,32 @@ Filename: "{app}\OpSecBar.exe"; Description: "Start OpSec Bar"; Flags: nowait po
 Filename: "{app}\OpSecBar.exe"; Parameters: "--restore"; RunOnceId: "RestoreTaskbar"; Flags: runhidden
 
 [Registry]
-; The app writes this value itself when "Start when I sign in" is on; the uninstaller removes it.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "OpSecBar"; Flags: dontcreatekey uninsdeletevalue
+; Start when I sign in: the app reads this Run entry at launch and keeps it in sync with Settings > System from then on.
+; The value matches what the app writes itself (AutoStartService.Command). Either way the uninstaller removes it.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "OpSecBar"; ValueData: """{app}\OpSecBar.exe"" --autostart"; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "OpSecBar"; Flags: deletevalue dontcreatekey uninsdeletevalue; Tasks: not autostart
 
 [Code]
+var
+  AutoStartDefaultSet: Boolean;
+
+// Fresh install: the startup checkbox is ticked. Upgrade: it shows whether OpSec Bar starts at sign-in right now,
+// so running setup again never turns that on or off by surprise. Silent installs keep the default or /TASKS.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpSelectTasks) and not AutoStartDefaultSet and not WizardSilent then
+  begin
+    AutoStartDefaultSet := True;
+    if FileExists(AddBackslash(WizardDirValue) + 'OpSecBar.exe') then
+    begin
+      if RegValueExists(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'OpSecBar') then
+        WizardSelectTasks('autostart')
+      else
+        WizardSelectTasks('!autostart');
+    end;
+  end;
+end;
+
 // Upgrading over a running copy: ask it to exit (which restores the Windows taskbar), then make sure no process is left.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var

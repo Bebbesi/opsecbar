@@ -33,18 +33,24 @@ public static class AutoStartService
     }
 
     /// <summary>
-    /// All'avvio allinea il registro all'impostazione salvata: aggiorna il percorso se l'eseguibile è stato spostato
-    /// e rimuove la voce se l'avvio automatico è disattivato.
+    /// All'avvio la voce Run è la fonte di verità: la crea o la rimuove anche l'installer ("Start OpSec Bar when I sign in").
+    /// Se c'è ma punta a un altro percorso (eseguibile spostato) viene aggiornata.
+    /// Restituisce lo stato dell'avvio automatico, o <paramref name="saved"/> se il registro non è leggibile.
     /// </summary>
-    public static void Sync(bool enabled)
+    public static bool Sync(bool saved)
     {
         try
         {
             string? current;
             using (var key = Registry.CurrentUser.OpenSubKey(RunKey)) current = key?.GetValue(ValueName) as string;
-            if (enabled && current != Command) Set(true);
-            else if (!enabled && current != null) Set(false);
+            if (string.IsNullOrEmpty(current)) return false;
+            if (current != Command) Set(true);
+            return true;
         }
-        catch (Exception ex) { Log.Error("Sincronizzazione avvio automatico", ex); }
+        catch (Exception ex)
+        {
+            Log.Error("Sincronizzazione avvio automatico", ex);
+            return saved;
+        }
     }
 }
