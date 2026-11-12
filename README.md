@@ -131,11 +131,22 @@ Every time it starts, OpSec Bar checks the [latest GitHub release](https://githu
 If a newer version exists it downloads the package, verifies its SHA-256 digest, replaces its files and restarts.
 Turn this off in *Settings → System → Install updates automatically*; the same page shows the status and a *Check now* button.
 
+*Get pre-release updates* (same page) follows the most recently published release, test builds included. Turning it
+off goes back to the latest release, even if that is older than the test build installed.
+
 To publish a release, set `<Version>` in `src/OpSecBar/OpSecBar.csproj`, commit, then push a matching tag:
 
 ```powershell
 git tag v1.2.0
 git push origin v1.2.0      # the Release workflow builds OpSecBar-Setup.exe and OpSecBar-win-x64.zip
+```
+
+To publish a test build as a GitHub pre-release, push a build tag instead: `b` + year, month, day, with `-2`, `-3`...
+for further builds on the same day. The tag is stamped into the app's version (e.g. `1.1.4-b20261112`).
+
+```powershell
+git tag b20261112
+git push origin b20261112   # second build of the day: b20261112-2
 ```
 
 ## Safety of the original taskbar

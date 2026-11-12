@@ -13,7 +13,7 @@
     <StartupObject>OpSecBar.Program</StartupObject>
     <AssemblyName>OpSecBar</AssemblyName>
     <RootNamespace>OpSecBar</RootNamespace>
-    <Version>1.1.3</Version>
+    <Version>1.1.4</Version>
     <Product>OpSec Bar</Product>
     <Description>A customizable alternative taskbar for Windows 10/11</Description>
     <SatelliteResourceLanguages>en;it</SatelliteResourceLanguages>

@@ -5,9 +5,13 @@ name: Release
 #   OpSecBar-win-x64.zip    the package the in-app updater downloads
 # Both include the .NET runtime, so they work on a clean Windows 10/11 x64 PC.
 # The tag must match <Version> in src/OpSecBar/OpSecBar.csproj.
+#
+# A test build tag like b20261112 (b + year, month, day; b20261112-2 for the second build of the day) publishes a
+# GitHub pre-release instead. The tag is stamped into the app's InformationalVersion (e.g. 1.1.3-b20261112) so the
+# in-app updater knows which build is installed. Only users with "Get pre-release updates" on receive it.
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'b*']
 
 permissions:
   contents: write
@@ -26,13 +30,27 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          $ref = '${{ github.ref_name }}'
           $version = ([xml](Get-Content src/OpSecBar/OpSecBar.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if ($tag -ne $version) { throw "Tag v$tag does not match project version $version." }
+          if ($ref -match '^b\d{8}(-\d+)?$') {
+            "build=$ref" >> $env:GITHUB_OUTPUT
+            "prerelease=true" >> $env:GITHUB_OUTPUT
+          } elseif ($ref.StartsWith('b')) {
+            throw "Build tag $ref must look like b20261112 or b20261112-2."
+          } else {
+            $tag = $ref.TrimStart('v')
+            if ($tag -ne $version) { throw "Tag v$tag does not match project version $version." }
+            "prerelease=false" >> $env:GITHUB_OUTPUT
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Publish
-        run: dotnet publish src/OpSecBar/OpSecBar.csproj -c Release -r win-x64 --self-contained true -o dist/OpSecBar
+        shell: pwsh
+        run: |
+          $extra = @()
+          if ('${{ steps.version.outputs.build }}') { $extra += '-p:InformationalVersion=${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}' }
+          dotnet publish src/OpSecBar/OpSecBar.csproj -c Release -r win-x64 --self-contained true -o dist/OpSecBar @extra
+          if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
 
       - name: Package zip
         shell: pwsh
@@ -52,4 +70,5 @@ jobs:
           files: |
             OpSecBar-Setup.exe
             OpSecBar-win-x64.zip
+          prerelease: ${{ steps.version.outputs.prerelease }}
           generate_release_notes: true

@@ -40,7 +40,7 @@ public partial class SettingsWindow : Window
         _app = app;
         InitializeComponent();
         ApplyPalette();
-        VersionText.Text = "Version " + (GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0");
+        VersionText.Text = "Version " + _app.Updates.CurrentLabel;
 
         SourceInitialized += (_, _) => ApplyTitleBar();
         _app.SettingsService.Changed += OnSettingChanged;
@@ -902,24 +902,28 @@ public partial class SettingsWindow : Window
 
         var updates = Section("Updates");
         Row(updates, "Install updates automatically", "Checks the latest GitHub release every time OpSec Bar starts.", Toggle(S.AutoUpdate, v => S.AutoUpdate = v));
+        Row(updates, "Get pre-release updates", "Updates to the newest version on GitHub, even if it's a pre-release. Turning this off goes back to the latest release.",
+            Toggle(S.PreReleaseUpdates, v => S.PreReleaseUpdates = v));
         UpdateService u = _app.Updates;
+        string found = u.LeavingPrerelease ? $"Latest release {u.LatestLabel}"
+            : u.LatestIsPrerelease ? $"Pre-release {u.LatestLabel}" : $"Version {u.LatestLabel}";
         (string status, string? action, Action? run) = u.State switch
         {
             UpdateState.Checking => ("Checking for updates…", null, null),
-            UpdateState.Downloading => ($"Downloading version {u.LatestVersion}…", null, null),
-            UpdateState.Available => ($"Version {u.LatestVersion} is available.", "Install", (Action)_app.InstallUpdate),
-            UpdateState.Ready => ($"Version {u.LatestVersion} is ready to install.", "Restart and install", (Action)_app.InstallUpdate),
+            UpdateState.Downloading => ($"Downloading {char.ToLowerInvariant(found[0])}{found[1..]}…", null, null),
+            UpdateState.Available => ($"{found} is available.", "Install", (Action)_app.InstallUpdate),
+            UpdateState.Ready => ($"{found} is ready to install.", "Restart and install", (Action)_app.InstallUpdate),
             UpdateState.UpToDate => ("You're up to date.", "Check now", (Action)(() => _app.CheckForUpdates(false))),
             UpdateState.Failed => ("Couldn't check for updates. " + u.Error, "Try again", (Action)(() => _app.CheckForUpdates(false))),
             _ => ("Not checked yet.", "Check now", (Action)(() => _app.CheckForUpdates(false)))
         };
         FrameworkElement control = action != null && run != null ? Btn(action, run, u.State is UpdateState.Available or UpdateState.Ready) : Gap(0);
-        Row(updates, "OpSec Bar " + u.CurrentVersion.ToString(3), status, control);
+        Row(updates, "OpSec Bar " + u.CurrentLabel, status, control);
 
         var about = Section("About");
         Row(about, "Version", null, new TextBlock
         {
-            Text = GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0", Foreground = (Brush)FindResource("S.Text2")
+            Text = u.CurrentLabel, Foreground = (Brush)FindResource("S.Text2")
         });
         Row(about, "Data folder", "Settings, themes and the log file.", Btn("Open folder", () =>
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.DataDir}\"") { UseShellExecute = false })));

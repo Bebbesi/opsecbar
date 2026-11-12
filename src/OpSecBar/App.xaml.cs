@@ -26,12 +26,15 @@ public partial class App : Application
     public AppCatalogService Catalog { get; } = new();
     public UpdateService Updates { get; } = new();
 
-    /// <summary>Controlla l'ultima release su GitHub; con <paramref name="install"/> la scarica e la installa subito.</summary>
-    public async void CheckForUpdates(bool install)
+    /// <summary>
+    /// Controlla l'ultima release su GitHub (o la più recente in assoluto, con le pre-release attive); con
+    /// <paramref name="install"/> la scarica e, se <paramref name="restart"/>, la installa subito.
+    /// </summary>
+    public async void CheckForUpdates(bool install, bool restart = true)
     {
         try
         {
-            if (await Updates.CheckAsync(install) && !_exiting) InstallUpdate();
+            if (await Updates.CheckAsync(install, Settings.PreReleaseUpdates) && restart && !_exiting) InstallUpdate();
         }
         catch (Exception ex) { Log.Error("Controllo aggiornamenti", ex); }
     }
@@ -132,7 +135,7 @@ public partial class App : Application
             _ = Catalog.GetAppsAsync();
 
             if (e.Args.Contains("--settings")) ShowSettings();
-            if (e.Args.Contains("--updated")) Log.Info($"Aggiornato alla versione {Updates.CurrentVersion}");
+            if (e.Args.Contains("--updated")) Log.Info($"Aggiornato alla versione {Updates.CurrentLabel}");
 
             // A ogni avvio, poco dopo che la barra è comparsa, si controlla se c'è una nuova release.
             var updateCheck = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
@@ -171,8 +174,16 @@ public partial class App : Application
 
     public IReadOnlyList<TaskbarWindow> Bars => _bars;
 
+    private string _screenLayout = "";
+    private bool _recreateOnlyIfScreensChanged;
+
+    /// <summary>Impronta della disposizione degli schermi (quali, dove, quanto grandi) con cui sono state create le barre.</summary>
+    private static string ScreenLayout() =>
+        string.Join("|", AppBarScreen.FromAllScreens().Select(s => $"{s.DeviceName}:{s.Bounds}:{s.Primary}"));
+
     private void OpenTaskbars()
     {
+        _screenLayout = ScreenLayout();
         var screens = Settings.AllMonitors ? AppBarScreen.FromAllScreens() : new List<AppBarScreen> { AppBarScreen.FromPrimaryScreen() };
         foreach (AppBarScreen screen in screens)
         {
@@ -201,10 +212,17 @@ public partial class App : Application
         _bars.Clear();
     }
 
-    /// <summary>Ricrea le barre (cambio di posizione, monitor collegati/scollegati...). Più richieste ravvicinate vengono unite.</summary>
-    public void ScheduleRecreateTaskbars()
+    /// <summary>
+    /// Ricrea le barre (cambio di posizione, monitor collegati/scollegati...). Più richieste ravvicinate vengono unite.
+    /// Con <paramref name="onlyIfScreensChanged"/> le barre vengono ricreate solo se la disposizione degli schermi è
+    /// davvero cambiata; altrimenti ci si limita a riconfermarne la posizione.
+    /// </summary>
+    public void ScheduleRecreateTaskbars(bool onlyIfScreensChanged = false)
     {
         if (_exiting) return;
+        // Una richiesta incondizionata già in attesa (es. cambio di impostazioni) prevale su quelle condizionate.
+        bool pending = _recreateTimer?.IsEnabled == true;
+        _recreateOnlyIfScreensChanged = onlyIfScreensChanged && (!pending || _recreateOnlyIfScreensChanged);
         if (_recreateTimer == null)
         {
             _recreateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
@@ -212,6 +230,14 @@ public partial class App : Application
             {
                 _recreateTimer!.Stop();
                 if (_exiting) return;
+                if (_recreateOnlyIfScreensChanged && ScreenLayout() == _screenLayout)
+                {
+                    foreach (TaskbarWindow bar in _bars)
+                    {
+                        try { bar.UpdatePosition(); } catch (Exception ex) { Log.Error("UpdatePosition", ex); }
+                    }
+                    return;
+                }
                 CloseTaskbars();
                 OpenTaskbars();
             };
@@ -267,6 +293,9 @@ public partial class App : Application
                 case nameof(AppSettings.HideWindowsTaskbar):
                     ApplyTaskbarHiding();
                     break;
+                case nameof(AppSettings.HideOnFullscreen):
+                    foreach (var bar in _bars) bar.SyncFullScreenState();
+                    break;
                 case nameof(AppSettings.AutoStart):
                     AutoStartService.Set(Settings.AutoStart);
                     break;
@@ -279,6 +308,12 @@ public partial class App : Application
                 case nameof(AppSettings.GroupWindows):
                     TaskList.ScheduleRebuild();
                     break;
+                case nameof(AppSettings.PreReleaseUpdates):
+                    // Cambio di canale: si cerca subito la versione giusta (spegnendolo si torna all'ultima release).
+                    // Con l'aggiornamento automatico la si scarica, ma il riavvio resta all'utente.
+                    CheckForUpdates(Settings.AutoUpdate, restart: false);
+                    break;
+                case nameof(AppSettings.AutoUpdate):
                 case nameof(AppSettings.RecentColors):
                 case nameof(AppSettings.PinnedTrayIcons):
                     break; // solo da salvare

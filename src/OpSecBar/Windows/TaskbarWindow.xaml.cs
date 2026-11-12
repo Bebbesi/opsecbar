@@ -67,6 +67,9 @@ public partial class TaskbarWindow : AppBarWindow
 
         BarBorder.SizeChanged += (_, _) => UpdateShape();
         Loaded += (_, _) => UpdateShape();
+        // Mostrare la finestra può riportarla in cima alle finestre normali: se ha ceduto il posto a un'app a schermo
+        // intero la si rimette in fondo.
+        ContentRendered += (_, _) => { if (!Topmost && Handle != IntPtr.Zero) WindowHelper.ShowWindowBottomMost(Handle); };
         IsVisibleChanged += (_, _) => ScheduleShapeUpdate();
         Closed += (_, _) =>
         {
@@ -335,6 +338,7 @@ public partial class TaskbarWindow : AppBarWindow
     {
         base.OnSourceInitialized(sender, e);
         if (CoversHiddenTaskbar) UpdatePosition(); // la registrazione di ManagedShell ci ha messo dopo la taskbar nascosta
+        SyncFullScreenState(); // prima che la finestra compaia: se c'è un gioco a schermo intero non deve mai finirgli sopra
         UpdateShape();
     }
 
@@ -453,9 +457,11 @@ public partial class TaskbarWindow : AppBarWindow
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, UpdateShape);
             return;
         }
-        // Monitor aggiunti/rimossi o risoluzione cambiata: si ricreano tutte le barre.
+        // Monitor aggiunti/rimossi o risoluzione cambiata: si ricreano tutte le barre. Questo avviso arriva però anche
+        // quando la disposizione degli schermi è rimasta identica (basta collegare una periferica USB o un controller):
+        // in quel caso le barre restano dove sono.
         _fullScreenHelper.NotifyScreensChanged();
-        _app.ScheduleRecreateTaskbars();
+        _app.ScheduleRecreateTaskbars(onlyIfScreensChanged: true);
     }
 
     protected override void OnFullScreenEnter(FullScreenApp app)
@@ -463,6 +469,26 @@ public partial class TaskbarWindow : AppBarWindow
         if (!_s.HideOnFullscreen) return;
         base.OnFullScreenEnter(app);
         UpdateShape();
+    }
+
+    /// <summary>
+    /// Allinea la barra alle app a schermo intero già note. La classe base reagisce solo quando la lista *cambia*:
+    /// una barra creata mentre un gioco è già a schermo intero (le barre vengono ricreate quando il gioco cambia
+    /// risoluzione) nascerebbe in primo piano sopra il gioco e ci resterebbe. Lì è visibile, oppure invisibile in
+    /// modalità esclusiva ma comunque cliccabile: un click le darebbe il focus e il gioco tornerebbe al desktop.
+    /// </summary>
+    public void SyncFullScreenState()
+    {
+        if (Handle == IntPtr.Zero || IsClosing) return;
+        try
+        {
+            FullScreenApp? app = _s.HideOnFullscreen
+                ? _fullScreenHelper.FullScreenApps.FirstOrDefault(a => a.screen.IsVirtualScreen || a.screen.DeviceName == Screen.DeviceName)
+                : null;
+            if (app != null && Topmost) OnFullScreenEnter(app);
+            else if (app == null && !Topmost) OnFullScreenLeave();
+        }
+        catch (Exception ex) { Log.Error("SyncFullScreenState", ex); }
     }
 
     protected override void OnFullScreenLeave()
