@@ -251,6 +251,16 @@ public partial class SettingsWindow : Window
         Row(border, "Gradient", "Fades the border into a second color, great for neon looks.",
             OptionalColorCtl(T.BorderColor2, "#00F0FF", v => Edit(t => t.BorderColor2 = v)));
 
+        var fx = Section("Animated border");
+        Row(fx, "Effect", "Minimal lights and lines, or something more fun walking around the bar.",
+            ComboCtl(BorderFxOptions, T.BorderFx, v => { Edit(t => t.BorderFx = v); Refresh(); }, 240));
+        if (T.BorderFx != BorderFx.None)
+        {
+            if (T.BorderFx != BorderFx.Rainbow && T.BorderFx != BorderFx.Duck && T.BorderFx != BorderFx.DuckFamily)
+                Row(fx, "Color", "Off = accent color.", OptionalColorCtl(T.BorderFxColor, T.AccentColor, v => Edit(t => t.BorderFxColor = v)));
+            Row(fx, "Speed", null, SliderCtl(T.BorderFxSpeed * 100, 25, 300, 5, "0'%'", v => Edit(t => t.BorderFxSpeed = v / 100)));
+        }
+
         var shadow = Section("Shadow and glow");
         Row(shadow, "Shadow", "Needs a floating margin.", Toggle(T.Shadow, v => Edit(t => t.Shadow = v)));
         Row(shadow, "Glow", "Spreads the shadow evenly around the bar, like a neon light.", Toggle(T.ShadowGlow, v => Edit(t => t.ShadowGlow = v)));
@@ -260,6 +270,11 @@ public partial class SettingsWindow : Window
         var icons = Section("Icons");
         Row(icons, "Icon size", null, SliderCtl(T.IconSize, 14, 40, 1, "0 px", v => Edit(t => t.IconSize = v)));
         Row(icons, "Icon spacing", null, SliderCtl(T.IconSpacing, 0, 20, 1, "0 px", v => Edit(t => t.IconSpacing = v)));
+        Row(icons, "Icon color", "Start, volume, player and tray buttons, and the tint of app icons. Off = text color.",
+            OptionalColorCtl(T.IconColor, T.AccentColor, v => Edit(t => t.IconColor = v)));
+        Row(icons, "App icon style", "Tinted washes app icons with the icon color; Monochrome turns them into solid silhouettes.",
+            ComboCtl(new[] { (IconStyle.Original, "Original colors"), (IconStyle.Tinted, "Tinted"), (IconStyle.Monochrome, "Monochrome") },
+                T.IconStyle, v => Edit(t => t.IconStyle = v), 200));
 
         var text = Section("Text");
         var fonts = Fonts.SystemFontFamilies.Select(f => f.Source).Distinct().OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase).ToList();
@@ -269,6 +284,24 @@ public partial class SettingsWindow : Window
             v => Edit(t => t.FontFamily = v == "Segoe UI" ? v : v + ", Segoe UI"), 240));
         Row(text, "Text size", null, SliderCtl(T.FontSize, 9, 18, 0.5, "0.# px", v => Edit(t => t.FontSize = v)));
     }
+
+    private static readonly (BorderFx Value, string Label)[] BorderFxOptions =
+    {
+        (BorderFx.None, "None"),
+        (BorderFx.Pulse, "Minimal · Pulse"),
+        (BorderFx.Comet, "Minimal · Comet"),
+        (BorderFx.TwinComets, "Minimal · Twin comets"),
+        (BorderFx.MarchingAnts, "Minimal · Marching ants"),
+        (BorderFx.Scanner, "Minimal · Scanner"),
+        (BorderFx.Rainbow, "Minimal · Rainbow flow"),
+        (BorderFx.Duck, "Fun · Duck"),
+        (BorderFx.DuckFamily, "Fun · Duck family"),
+        (BorderFx.Snake, "Fun · Snake"),
+        (BorderFx.Fireflies, "Fun · Fireflies"),
+        (BorderFx.Ufo, "Fun · UFO"),
+    };
+
+    private static string BorderFxLabel(BorderFx fx) => BorderFxOptions.FirstOrDefault(o => o.Value == fx).Label?.Split(" · ").Last() ?? "";
 
     private void BuildThemes()
     {
@@ -336,10 +369,12 @@ public partial class SettingsWindow : Window
             footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var caption = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             caption.Children.Add(new TextBlock { Text = unsaved ? "Custom" : theme.Name, TextTrimming = TextTrimming.CharacterEllipsis });
-            if (active)
+            string detail = active ? (unsaved ? "Current · not saved" : "Current") : "";
+            if (theme.BorderFx != BorderFx.None) detail += (detail.Length > 0 ? " · " : "") + "Animated: " + BorderFxLabel(theme.BorderFx);
+            if (detail.Length > 0)
                 caption.Children.Add(new TextBlock
                 {
-                    Text = unsaved ? "Current · not saved" : "Current", FontSize = 12, Foreground = (Brush)FindResource("S.Text2")
+                    Text = detail, FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), TextTrimming = TextTrimming.CharacterEllipsis
                 });
             footer.Children.Add(caption);
 
@@ -421,7 +456,8 @@ public partial class SettingsWindow : Window
         for (int i = 0; i < 4; i++)
         {
             var icon = new Grid { Width = 9, Margin = new Thickness(0, 0, 4, 0) };
-            icon.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(ThemeService.WithAlpha(fg, 0.85)), VerticalAlignment = VerticalAlignment.Center });
+            Color iconColor = string.IsNullOrWhiteSpace(theme.IconColor) ? ThemeService.WithAlpha(fg, 0.85) : ThemeService.ParseColor(theme.IconColor, fg);
+            icon.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(theme.IconStyle == IconStyle.Monochrome ? 3.5 : 2), Background = new SolidColorBrush(iconColor), VerticalAlignment = VerticalAlignment.Center });
             if (i == 1)
                 icon.Children.Add(new Border { Width = 7, Height = 1.5, CornerRadius = new CornerRadius(1), Background = new SolidColorBrush(accent), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, -3.5) });
             left.Children.Add(icon);
@@ -977,6 +1013,7 @@ public partial class SettingsWindow : Window
         Row(clock, "Show the clock", null, Toggle(S.ShowClock, v => S.ShowClock = v));
         Row(clock, "Time format", "Leave empty for automatic. Examples: HH:mm · h:mm tt · HH:mm:ss · H.mm",
             FormatCtl(S.ClockFormat, "HH:mm", v => S.ClockFormat = v));
+        Row(clock, "Prefix and suffix", "Fixed text around the time, e.g. [ and ] or $ for a terminal look.", PrefixSuffixCtl());
         Row(clock, "Color", "Off = same as the bar text.", OptionalColorCtl(T.ClockColor, T.AccentColor, v => Edit(t => t.ClockColor = v)));
         var fonts = FontNames();
         fonts.Insert(0, "Same as the bar");
@@ -1005,6 +1042,31 @@ public partial class SettingsWindow : Window
         Row(pill, "Background", "A rounded pill behind the clock and the volume.",
             OptionalColorCtl(T.WidgetBackground, "#26FFFFFF", v => Edit(t => t.WidgetBackground = v)));
         Row(pill, "Corner radius", null, SliderCtl(T.WidgetRadius, 0, 20, 1, "0 px", v => Edit(t => t.WidgetRadius = v)));
+    }
+
+    /// <summary>Due caselle (prima / dopo l'ora) salvate all'Invio o all'uscita dalla casella.</summary>
+    private FrameworkElement PrefixSuffixCtl()
+    {
+        TextBox Box(string value, Action<string> set)
+        {
+            var box = new TextBox
+            {
+                Style = (Style)FindResource("S.TextBox"), Width = 84, Text = value, MaxLength = 12,
+                FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 13
+            };
+            void Commit() { if (box.Text != value) { value = box.Text; Safe(() => Edit(t => set(value))); } }
+            box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Commit(); };
+            box.LostKeyboardFocus += (_, _) => Commit();
+            return box;
+        }
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(Box(T.ClockPrefix, v => T.ClockPrefix = v));
+        panel.Children.Add(new TextBlock
+        {
+            Text = "time", Foreground = (Brush)FindResource("S.Text3"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0)
+        });
+        panel.Children.Add(Box(T.ClockSuffix, v => T.ClockSuffix = v));
+        return panel;
     }
 
     /// <summary>Casella per un formato data/ora .NET con anteprima dal vivo.</summary>

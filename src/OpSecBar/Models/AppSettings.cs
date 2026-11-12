@@ -11,6 +11,10 @@ public enum BackdropMode { Solid, Transparent, Blur, Acrylic, Glass }
 public enum BorderSides { All, DesktopSide, ScreenSide }
 /// <summary>Dove compaiono le GIF sulla barra.</summary>
 public enum GifPlacement { Left, Center, Right }
+/// <summary>Come disegnare le icone delle app: colori originali, velate dal colore delle icone, oppure in tinta unita.</summary>
+public enum IconStyle { Original, Tinted, Monochrome }
+/// <summary>Effetto animato sul bordo della barra: minimal (luce, tratteggio, arcobaleno) o divertente (personaggi).</summary>
+public enum BorderFx { None, Pulse, Comet, TwinComets, MarchingAnts, Rainbow, Scanner, Duck, DuckFamily, Snake, Fireflies, Ufo }
 /// <summary>Elementi della barra che il layout avanzato permette di disporre a piacere.</summary>
 public enum BarWidget { Apps, Media, Gifs, SysInfo, Volume, Clock, Tray, QuickSettings, Start }
 /// <summary>Zone della barra: inizio (sinistra/alto), centro, fine (destra/basso).</summary>
@@ -106,6 +110,10 @@ public class ThemeData : ObservableObject
     private string _clockColor = "", _clockFont = "", _dateColor = "", _volumeColor = "", _widgetBackground = "";
     private double _clockFontSize, _widgetRadius = 6;
     private bool _clockBold = true;
+    private string _iconColor = "", _borderFxColor = "", _clockPrefix = "", _clockSuffix = "";
+    private IconStyle _iconStyle = IconStyle.Original;
+    private BorderFx _borderFx = BorderFx.None;
+    private double _borderFxSpeed = 1;
 
     public string Name { get => _name; set => Set(ref _name, value); }
     public BackdropMode Backdrop { get => _backdrop; set => Set(ref _backdrop, value); }
@@ -149,6 +157,21 @@ public class ThemeData : ObservableObject
     /// <summary>Sfondo "a pillola" dietro orologio e volume (vuoto = nessuno).</summary>
     public string WidgetBackground { get => _widgetBackground; set => Set(ref _widgetBackground, value); }
     public double WidgetRadius { get => _widgetRadius; set => Set(ref _widgetRadius, value); }
+    /// <summary>Testo fisso prima/dopo l'ora, es. "[ " e " ]" o "$ " per i temi da terminale.</summary>
+    public string ClockPrefix { get => _clockPrefix; set => Set(ref _clockPrefix, value); }
+    public string ClockSuffix { get => _clockSuffix; set => Set(ref _clockSuffix, value); }
+
+    // Icone
+    /// <summary>Colore delle icone a glifo (Start, volume, player...) e della tinta delle icone delle app (vuoto = testo).</summary>
+    public string IconColor { get => _iconColor; set => Set(ref _iconColor, value); }
+    public IconStyle IconStyle { get => _iconStyle; set => Set(ref _iconStyle, value); }
+
+    // Bordo animato
+    public BorderFx BorderFx { get => _borderFx; set => Set(ref _borderFx, value); }
+    /// <summary>Colore dell'effetto (vuoto = accento).</summary>
+    public string BorderFxColor { get => _borderFxColor; set => Set(ref _borderFxColor, value); }
+    /// <summary>Velocità relativa dell'effetto (1 = normale).</summary>
+    public double BorderFxSpeed { get => _borderFxSpeed; set => Set(ref _borderFxSpeed, value); }
 
     public ThemeData Clone() => JsonSerializer.Deserialize<ThemeData>(JsonSerializer.Serialize(this, JsonOptions.Default), JsonOptions.Default)!;
 }

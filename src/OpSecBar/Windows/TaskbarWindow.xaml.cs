@@ -55,7 +55,7 @@ public partial class TaskbarWindow : AppBarWindow
         AutoHideShowMargin = 3;
 
         TaskItems.ItemsSource = app.TaskList.Items;
-        Media.Attach(app.Media, AppBarEdge);
+        Media.Attach(app.Media, AppBarEdge, app.Audio);
         Media.FlyoutOpenChanged += OnPopupStateChanged;
         Tray.Attach(app.Shell.NotificationArea, AppBarEdge);
         Tray.OverflowOpenChanged += OnPopupStateChanged;
@@ -309,6 +309,17 @@ public partial class TaskbarWindow : AppBarWindow
             ShadowDepth = t.ShadowGlow ? 0 : 2, Direction = 270, Opacity = (t.ShadowGlow ? 0.95 : 0.5) * strength
         };
 
+        // Bordo animato: stessa sagoma della barra, colore dell'effetto (o accento) e lato verso il desktop.
+        FxLayer.Margin = margin;
+        Color fxColor = ThemeService.ParseColor(string.IsNullOrWhiteSpace(t.BorderFxColor) ? t.AccentColor : t.BorderFxColor, Colors.White);
+        FxLayer.Configure(t.BorderFx, fxColor, t.BorderFxSpeed, radius, border, AppBarEdge switch
+        {
+            AppBarEdge.Bottom => Dock.Top,
+            AppBarEdge.Left => Dock.Right,
+            AppBarEdge.Right => Dock.Left,
+            _ => Dock.Bottom
+        });
+
         ApplyWidgetStyle(t);
         BuildGifs();
 
@@ -330,6 +341,8 @@ public partial class TaskbarWindow : AppBarWindow
         ThemeData t = _s.Theme;
         // Niente lastra se la barra è nascosta (auto-hide) o ha ceduto il posto a un'app a schermo intero.
         bool blur = BackdropHelper.BlurActive(t.Backdrop) && !_hiddenByAutoHide && Topmost && IsVisible && BarBorder.ActualWidth > 0;
+        // Il bordo animato non consuma nulla mentre la barra è nascosta o dietro un'app a schermo intero.
+        FxLayer.SetPaused(_hiddenByAutoHide || !Topmost || !IsVisible);
         Color bg = ThemeService.ParseColor(t.BackgroundColor, Color.FromRgb(0x1B, 0x1C, 0x22));
 
         try
@@ -645,7 +658,7 @@ public partial class TaskbarWindow : AppBarWindow
 
         SetColor(ClockTime, t.ClockColor, "FgBrush");
         SetColor(ClockDate, t.DateColor, "FgDimBrush");
-        SetColor(VolumeGlyph, t.VolumeColor, "FgBrush");
+        SetColor(VolumeGlyph, t.VolumeColor, "IconBrush");
         SetColor(VolumeText, t.VolumeColor, "FgBrush");
 
         if (string.IsNullOrWhiteSpace(t.ClockFont)) ClockTime.ClearValue(TextBlock.FontFamilyProperty);
@@ -684,6 +697,7 @@ public partial class TaskbarWindow : AppBarWindow
             : (_s.ShowSeconds ? "h:mm:ss tt" : "h:mm tt"));
         string date = _s.ShowDate ? Format(now, _s.DateFormat, IsHorizontal ? "ddd d MMM" : "d/M") : "";
         if (!IsHorizontal) time = time.Replace(":", "\n").Replace(" ", "\n");
+        else time = _s.Theme.ClockPrefix + time + _s.Theme.ClockSuffix; // es. "[ 14:32 ]" nei temi da terminale
 
         string key = time + "|" + date;
         if (key == _lastClock) return;
@@ -915,6 +929,8 @@ public partial class TaskbarWindow : AppBarWindow
             };
             st.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
             st.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+            // La tinta (se attiva) segue l'icona.
+            if (panel.Children.OfType<System.Windows.Shapes.Rectangle>().FirstOrDefault(r => r.Name == "Tint") is { } tint) tint.RenderTransform = st;
         }
         catch (Exception ex) { Log.Warn("Animazione icona: " + ex.Message); }
     }

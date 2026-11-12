@@ -17,11 +17,21 @@
                 <Border x:Name="Hover" CornerRadius="7" Background="Transparent" />
                 <Image x:Name="Icon" Source="{Binding Icon}" Width="{DynamicResource BarIconSize}" Height="{DynamicResource BarIconSize}"
                        Margin="7,4,7,6" RenderOptions.BitmapScalingMode="HighQuality" RenderTransformOrigin="0.5,0.5"
+                       Opacity="{DynamicResource AppIconImageOpacity}"
                        VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Image.RenderTransform>
                         <ScaleTransform />
                     </Image.RenderTransform>
                 </Image>
+                <!-- Tinta delle icone (stile "Tinted"/"Monochrome"): rettangolo colorato con l'icona come maschera -->
+                <Rectangle x:Name="Tint" Width="{DynamicResource BarIconSize}" Height="{DynamicResource BarIconSize}" Margin="7,4,7,6"
+                           Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}"
+                           Visibility="{DynamicResource AppIconTintVisibility}" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5"
+                           VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Rectangle.OpacityMask>
+                        <ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" />
+                    </Rectangle.OpacityMask>
+                </Rectangle>
                 <Border x:Name="Dot" Height="3" Width="0" CornerRadius="1.5" VerticalAlignment="Bottom" HorizontalAlignment="Center"
                         Margin="0,0,0,1" Background="{DynamicResource FgDimBrush}" />
             </Grid>
@@ -92,7 +102,7 @@
                 <Button x:Name="VolumeButton" Style="{StaticResource BarButton}" Padding="7,0" Click="Volume_Click"
                         PreviewMouseWheel="Volume_Wheel" MouseRightButtonUp="Volume_RightUp" ToolTip="Volume">
                     <StackPanel x:Name="VolumePanel" Orientation="Horizontal">
-                        <TextBlock x:Name="VolumeGlyph" Style="{StaticResource Glyph}" Text="&#xE995;" FontSize="14" />
+                        <TextBlock x:Name="VolumeGlyph" Style="{StaticResource Glyph}" Text="&#xE995;" FontSize="14" Foreground="{DynamicResource IconBrush}" />
                         <TextBlock x:Name="VolumeText" Margin="5,0,0,0" VerticalAlignment="Center" TextAlignment="Center" />
                     </StackPanel>
                 </Button>
@@ -109,7 +119,7 @@
 
                 <Button x:Name="QuickButton" Style="{StaticResource BarButton}" Padding="7,0" Click="Quick_Click"
                         ToolTip="Quick settings">
-                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE9E9;" FontSize="14" />
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE9E9;" FontSize="14" Foreground="{DynamicResource IconBrush}" />
                 </Button>
 
                 <Button x:Name="StartButton" Style="{StaticResource BarButton}" Padding="8,0" Click="Start_Click"
@@ -117,13 +127,16 @@
                     <!-- Logo proprio: quattro tessere arrotondate, una in colore d'accento -->
                     <Canvas Width="16" Height="16">
                         <Rectangle Width="7" Height="7" RadiusX="2" RadiusY="2" Fill="{DynamicResource AccentBrush}" />
-                        <Rectangle Canvas.Left="9" Width="7" Height="7" RadiusX="2" RadiusY="2" Fill="{DynamicResource FgBrush}" />
-                        <Rectangle Canvas.Top="9" Width="7" Height="7" RadiusX="2" RadiusY="2" Fill="{DynamicResource FgBrush}" />
-                        <Rectangle Canvas.Left="9" Canvas.Top="9" Width="7" Height="7" RadiusX="3.5" RadiusY="3.5" Fill="{DynamicResource FgBrush}" />
+                        <Rectangle Canvas.Left="9" Width="7" Height="7" RadiusX="2" RadiusY="2" Fill="{DynamicResource IconBrush}" />
+                        <Rectangle Canvas.Top="9" Width="7" Height="7" RadiusX="2" RadiusY="2" Fill="{DynamicResource IconBrush}" />
+                        <Rectangle Canvas.Left="9" Canvas.Top="9" Width="7" Height="7" RadiusX="3.5" RadiusY="3.5" Fill="{DynamicResource IconBrush}" />
                     </Canvas>
                 </Button>
             </c:BarPanel>
         </Border>
+
+        <!-- Bordo animato (minimal o divertente): sopra la barra, non intercetta il mouse -->
+        <c:BorderFxLayer x:Name="FxLayer" />
 
         <Popup x:Name="VolumeFlyout" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
                PlacementTarget="{Binding ElementName=VolumeButton}" Opened="VolumeFlyout_Opened" Closed="VolumeFlyout_Closed">

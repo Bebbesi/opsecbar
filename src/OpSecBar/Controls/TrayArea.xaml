@@ -7,7 +7,12 @@
             <Border x:Name="Bd" Width="26" Height="26" Margin="1" CornerRadius="5" Background="Transparent"
                     MouseEnter="Icon_MouseEnter" MouseLeave="Icon_MouseLeave" MouseMove="Icon_MouseMove"
                     PreviewMouseDown="Icon_MouseDown" PreviewMouseUp="Icon_MouseUp" LostMouseCapture="Icon_LostMouseCapture">
-                <Image Source="{Binding Icon}" Width="16" Height="16" RenderOptions.BitmapScalingMode="HighQuality" />
+                <Grid Width="16" Height="16">
+                    <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                    <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}" IsHitTestVisible="False">
+                        <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                    </Rectangle>
+                </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
@@ -33,7 +38,7 @@
     <StackPanel x:Name="HostPanel" Orientation="Horizontal">
         <Button x:Name="Chevron" Style="{StaticResource BarButton}" Padding="4,0" MinWidth="24" Click="Chevron_Click"
                 ToolTip="Show hidden icons">
-            <TextBlock x:Name="ChevronGlyph" Style="{StaticResource Glyph}" FontSize="10" Text="&#xE70D;" />
+            <TextBlock x:Name="ChevronGlyph" Style="{StaticResource Glyph}" FontSize="10" Text="&#xE70D;" Foreground="{DynamicResource IconBrush}" />
         </Button>
 
         <ItemsControl x:Name="PinnedItems" ItemTemplate="{StaticResource TrayIconTemplate}" VerticalAlignment="Center"

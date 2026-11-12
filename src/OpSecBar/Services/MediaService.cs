@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using OpSecBar.Core;
 using Windows.Media.Control;
+using AutoRepeat = Windows.Media.MediaPlaybackAutoRepeatMode;
 
 namespace OpSecBar.Services;
 
@@ -25,6 +26,13 @@ public sealed class MediaService : ObservableObject
     private double _rate = 1;
 
     private bool _hasSession, _isPlaying, _canSeek, _canNext = true, _canPrevious = true;
+    private bool _canShuffle, _canRepeat, _shuffle;
+    private RepeatMode _repeat;
+    private string _sourceAppId = "";
+    private TimeSpan _startTime;
+    // Dopo un seek alcune app inviano ancora per un attimo la vecchia posizione: la si ignora finché non si allinea.
+    private TimeSpan _seekTarget;
+    private DateTime _seekGuardUntil = DateTime.MinValue;
     private string _title = "", _artist = "";
     private ImageSource? _cover;
     private TimeSpan _position, _duration;
@@ -34,6 +42,12 @@ public sealed class MediaService : ObservableObject
     public bool CanSeek { get => _canSeek; private set => Set(ref _canSeek, value); }
     public bool CanNext { get => _canNext; private set => Set(ref _canNext, value); }
     public bool CanPrevious { get => _canPrevious; private set => Set(ref _canPrevious, value); }
+    public bool CanShuffle { get => _canShuffle; private set => Set(ref _canShuffle, value); }
+    public bool CanRepeat { get => _canRepeat; private set => Set(ref _canRepeat, value); }
+    public bool Shuffle { get => _shuffle; private set => Set(ref _shuffle, value); }
+    public RepeatMode Repeat { get => _repeat; private set => Set(ref _repeat, value); }
+    /// <summary>App che possiede la sessione (AUMID o nome dell'eseguibile, es. "Spotify.exe").</summary>
+    public string SourceAppId { get => _sourceAppId; private set => Set(ref _sourceAppId, value); }
     public string Title { get => _title; private set => Set(ref _title, value); }
     public string Artist { get => _artist; private set => Set(ref _artist, value); }
     public ImageSource? Cover { get => _cover; private set => Set(ref _cover, value); }
@@ -104,6 +118,8 @@ public sealed class MediaService : ObservableObject
         _session.PlaybackInfoChanged += OnPlaybackInfoChanged;
         _session.TimelinePropertiesChanged += OnTimelineChanged;
 
+        try { SourceAppId = _session.SourceAppUserModelId ?? ""; } catch { SourceAppId = ""; }
+        _seekGuardUntil = DateTime.MinValue;
         HasSession = true;
         RefreshProperties();
         RefreshPlayback();
@@ -120,6 +136,9 @@ public sealed class MediaService : ObservableObject
         Cover = null;
         Duration = TimeSpan.Zero;
         Position = TimeSpan.Zero;
+        SourceAppId = "";
+        CanShuffle = CanRepeat = Shuffle = false;
+        Repeat = RepeatMode.None;
     }
 
     private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession s, MediaPropertiesChangedEventArgs e) => _ui.BeginInvoke(RefreshProperties);
@@ -179,6 +198,15 @@ public sealed class MediaService : ObservableObject
             CanNext = c?.IsNextEnabled ?? true;
             CanPrevious = c?.IsPreviousEnabled ?? true;
             CanSeek = c?.IsPlaybackPositionEnabled ?? false;
+            CanShuffle = c?.IsShuffleEnabled ?? false;
+            CanRepeat = c?.IsRepeatEnabled ?? false;
+            Shuffle = info.IsShuffleActive ?? false;
+            Repeat = info.AutoRepeatMode switch
+            {
+                AutoRepeat.List => RepeatMode.All,
+                AutoRepeat.Track => RepeatMode.One,
+                _ => RepeatMode.None
+            };
             RefreshTimeline();
         }
         catch (Exception ex) { Log.Warn("RefreshPlayback: " + ex.Message); }
@@ -193,7 +221,16 @@ public sealed class MediaService : ObservableObject
             var t = session.GetTimelineProperties();
             if (t == null) return;
             Duration = t.EndTime > t.StartTime ? t.EndTime - t.StartTime : TimeSpan.Zero;
-            _basePosition = t.Position - t.StartTime;
+            _startTime = t.StartTime;
+            TimeSpan reported = t.Position - t.StartTime;
+            if (DateTime.UtcNow < _seekGuardUntil && Math.Abs((reported - _seekTarget).TotalSeconds) > 2.5)
+            {
+                // Posizione vecchia, precedente al seek: si continua a interpolare dal punto richiesto.
+                if (IsPlaying && HasTimeline) _tick.Start(); else _tick.Stop();
+                return;
+            }
+            _seekGuardUntil = DateTime.MinValue;
+            _basePosition = reported;
             _baseTime = t.LastUpdatedTime;
             UpdateInterpolatedPosition();
             if (IsPlaying && HasTimeline) _tick.Start(); else _tick.Stop();
@@ -240,9 +277,45 @@ public sealed class MediaService : ObservableObject
             var target = TimeSpan.FromSeconds(Duration.TotalSeconds * Math.Clamp(fraction, 0, 1));
             _basePosition = target;
             _baseTime = DateTimeOffset.Now;
+            _seekTarget = target;
+            _seekGuardUntil = DateTime.UtcNow.AddSeconds(2);
             Position = target;
-            await _session.TryChangePlaybackPositionAsync(target.Ticks);
+            // La posizione è assoluta: va sommato l'inizio della timeline (quasi sempre 0).
+            await _session.TryChangePlaybackPositionAsync((_startTime + target).Ticks);
         }
         catch (Exception ex) { Log.Warn("Seek: " + ex.Message); }
     }
+
+    public async void ToggleShuffle()
+    {
+        try
+        {
+            if (_session == null || !CanShuffle) return;
+            bool next = !Shuffle;
+            Shuffle = next; // risposta immediata nella UI; la conferma arriva da PlaybackInfoChanged
+            if (!await _session.TryChangeShuffleActiveAsync(next)) RefreshPlayback();
+        }
+        catch (Exception ex) { Log.Warn("Shuffle: " + ex.Message); }
+    }
+
+    /// <summary>Ripetizione a ciclo: nessuna → tutta la playlist → brano singolo → nessuna.</summary>
+    public async void CycleRepeat()
+    {
+        try
+        {
+            if (_session == null || !CanRepeat) return;
+            RepeatMode next = Repeat switch { RepeatMode.None => RepeatMode.All, RepeatMode.All => RepeatMode.One, _ => RepeatMode.None };
+            Repeat = next;
+            var mode = next switch
+            {
+                RepeatMode.All => AutoRepeat.List,
+                RepeatMode.One => AutoRepeat.Track,
+                _ => AutoRepeat.None
+            };
+            if (!await _session.TryChangeAutoRepeatModeAsync(mode)) RefreshPlayback();
+        }
+        catch (Exception ex) { Log.Warn("Repeat: " + ex.Message); }
+    }
 }
+
+public enum RepeatMode { None, All, One }

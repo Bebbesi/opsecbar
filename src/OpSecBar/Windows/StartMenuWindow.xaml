@@ -9,7 +9,12 @@
         <!-- Riga dell'elenco "All apps" -->
         <DataTemplate x:Key="AppRowTemplate">
             <StackPanel Orientation="Horizontal" Height="36">
-                <Image Source="{Binding Icon}" Width="24" Height="24" Margin="8,0,12,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <Grid Width="24" Height="24" Margin="8,0,12,0">
+                    <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                    <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
+                        <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                    </Rectangle>
+                </Grid>
                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </StackPanel>
         </DataTemplate>
@@ -43,7 +48,12 @@
             <Button Style="{StaticResource PanelButton}" Width="88" Height="78" Margin="2" Padding="4"
                     Click="Favorite_Click" MouseRightButtonUp="Favorite_RightClick" ToolTip="{Binding Name}">
                 <StackPanel>
-                    <Image Source="{Binding Icon}" Width="30" Height="30" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <Grid Width="30" Height="30">
+                        <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                        <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
+                            <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                        </Rectangle>
+                    </Grid>
                     <TextBlock Text="{Binding Name}" FontSize="11.5" Margin="0,7,0,0" TextAlignment="Center" MaxWidth="80"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>

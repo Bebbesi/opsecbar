@@ -238,6 +238,190 @@ public static class ThemeService
             ClockColor = "#39FF14", ClockFont = "Bahnschrift, Segoe UI", ClockFontSize = 15, DateColor = "#BC13FE",
             VolumeColor = "#FFE600", WidgetBackground = "#1F39FF14", WidgetRadius = 6
         },
+
+        // ---- Temi "da terminale" ---------------------------------------------------------------
+        // Palette dei temi più amati da terminale ed editor, con barre in stile i3/polybar/waybar.
+        new()
+        {
+            // Polybar classica: barra piatta, linea sotto, ora tra parentesi quadre.
+            Name = "Gruvbox", Backdrop = BackdropMode.Solid, BackgroundColor = "#282828", Opacity = 1,
+            ForegroundColor = "#EBDBB2", AccentColor = "#FE8019", PanelColor = "#32302F", PanelOpacity = 1,
+            CornerRadius = 0, BarHeight = 32, Margin = 0, IconSize = 18, IconSpacing = 6,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 2, BorderColor = "#FE8019", BorderSides = BorderSides.DesktopSide,
+            ClockColor = "#B8BB26", ClockFont = "Cascadia Mono, Consolas", ClockPrefix = "[ ", ClockSuffix = " ]",
+            DateColor = "#FABD2F", VolumeColor = "#83A598", IconColor = "#EBDBB2", WidgetBackground = "#3C3836", WidgetRadius = 0
+        },
+        new()
+        {
+            // Isola flottante in stile waybar, con una cometa che gira sul bordo.
+            Name = "Tokyo Night", Backdrop = BackdropMode.Solid, BackgroundColor = "#1A1B26", BackgroundColor2 = "#24283B", Opacity = 0.97,
+            ForegroundColor = "#C0CAF5", AccentColor = "#7AA2F7", PanelColor = "#1F2335", PanelOpacity = 1,
+            CornerRadius = 12, BarHeight = 38, Margin = 8, IconSize = 20, IconSpacing = 6,
+            FontFamily = "Cascadia Code, Consolas", FontSize = 12.5,
+            BorderThickness = 1.5, BorderColor = "#3B4261", Shadow = true, ShadowColor = "#000000", ShadowSize = 16,
+            ClockColor = "#7DCFFF", ClockFont = "Cascadia Code, Consolas", DateColor = "#BB9AF7", VolumeColor = "#9ECE6A",
+            WidgetBackground = "#292E42", WidgetRadius = 8, IconColor = "#7AA2F7",
+            BorderFx = BorderFx.Comet, BorderFxColor = "#7DCFFF"
+        },
+        new()
+        {
+            Name = "Catppuccin Mocha", Backdrop = BackdropMode.Acrylic, BackgroundColor = "#1E1E2E", Opacity = 0.88,
+            ForegroundColor = "#CDD6F4", AccentColor = "#CBA6F7", PanelColor = "#181825", PanelOpacity = 0.96,
+            CornerRadius = 16, BarHeight = 40, Margin = 8, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Cascadia Code, Consolas", FontSize = 12.5,
+            BorderThickness = 1.5, BorderColor = "#CBA6F7", BorderColor2 = "#F5C2E7", Shadow = true, ShadowGlow = true,
+            ShadowColor = "#66CBA6F7", ShadowSize = 16,
+            ClockColor = "#F5C2E7", DateColor = "#89B4FA", VolumeColor = "#A6E3A1", WidgetBackground = "#313244", WidgetRadius = 10,
+            IconColor = "#CBA6F7", BorderFx = BorderFx.Pulse, BorderFxColor = "#F5C2E7", BorderFxSpeed = 0.6
+        },
+        new()
+        {
+            // Icone monocromatiche: tutta la barra parla la stessa palette.
+            Name = "Solarized Dark", Backdrop = BackdropMode.Solid, BackgroundColor = "#002B36", Opacity = 1,
+            ForegroundColor = "#93A1A1", AccentColor = "#268BD2", PanelColor = "#073642", PanelOpacity = 1,
+            CornerRadius = 0, BarHeight = 34, Margin = 0, IconSize = 18, IconSpacing = 8,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 1, BorderColor = "#586E75", BorderSides = BorderSides.DesktopSide,
+            ClockColor = "#B58900", ClockFont = "Cascadia Mono, Consolas", ClockPrefix = "~ ", DateColor = "#2AA198", VolumeColor = "#859900",
+            IconColor = "#93A1A1", IconStyle = IconStyle.Monochrome
+        },
+        new()
+        {
+            Name = "Monokai", Backdrop = BackdropMode.Solid, BackgroundColor = "#272822", Opacity = 1,
+            ForegroundColor = "#F8F8F2", AccentColor = "#A6E22E", PanelColor = "#2D2E27", PanelOpacity = 1,
+            CornerRadius = 4, BarHeight = 36, Margin = 4, IconSize = 19, IconSpacing = 6,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 1.5, BorderColor = "#49483E",
+            ClockColor = "#E6DB74", ClockFont = "Cascadia Mono, Consolas", ClockPrefix = "» ", DateColor = "#66D9EF", VolumeColor = "#FD971F",
+            IconColor = "#F92672", BorderFx = BorderFx.MarchingAnts, BorderFxColor = "#F92672", BorderFxSpeed = 0.7
+        },
+        new()
+        {
+            Name = "One Dark", Backdrop = BackdropMode.Solid, BackgroundColor = "#282C34", Opacity = 0.98,
+            ForegroundColor = "#ABB2BF", AccentColor = "#61AFEF", PanelColor = "#21252B", PanelOpacity = 1,
+            CornerRadius = 8, BarHeight = 38, Margin = 6, IconSize = 20, IconSpacing = 6,
+            FontFamily = "Cascadia Code, Consolas", FontSize = 12.5, BorderThickness = 1, BorderColor = "#3E4451",
+            ClockColor = "#98C379", DateColor = "#C678DD", VolumeColor = "#E5C07B", WidgetBackground = "#2C313A", WidgetRadius = 6,
+            IconColor = "#61AFEF", IconStyle = IconStyle.Tinted
+        },
+        new()
+        {
+            Name = "Rosé Pine", Backdrop = BackdropMode.Acrylic, BackgroundColor = "#191724", Opacity = 0.85,
+            ForegroundColor = "#E0DEF4", AccentColor = "#EBBCBA", PanelColor = "#1F1D2E", PanelOpacity = 0.96,
+            CornerRadius = 18, BarHeight = 40, Margin = 10, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Segoe UI Variable Display, Segoe UI", FontSize = 12.5,
+            BorderThickness = 1.5, BorderColor = "#C4A7E7", BorderColor2 = "#EBBCBA", Shadow = true, ShadowGlow = true,
+            ShadowColor = "#88C4A7E7", ShadowSize = 18,
+            ClockColor = "#EBBCBA", DateColor = "#C4A7E7", VolumeColor = "#9CCFD8", WidgetBackground = "#26233A", WidgetRadius = 12,
+            BorderFx = BorderFx.Fireflies, BorderFxColor = "#F6C177", BorderFxSpeed = 0.8
+        },
+        new()
+        {
+            Name = "Kanagawa", Backdrop = BackdropMode.Solid, BackgroundColor = "#1F1F28", Opacity = 1,
+            ForegroundColor = "#DCD7BA", AccentColor = "#7E9CD8", PanelColor = "#2A2A37", PanelOpacity = 1,
+            CornerRadius = 6, BarHeight = 36, Margin = 6, IconSize = 19, IconSpacing = 6,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 2, BorderColor = "#7E9CD8", BorderColor2 = "#957FB8",
+            ClockColor = "#E6C384", ClockFont = "Cascadia Mono, Consolas", DateColor = "#957FB8", VolumeColor = "#98BB6C",
+            WidgetBackground = "#363646", WidgetRadius = 4, IconColor = "#DCD7BA", IconStyle = IconStyle.Tinted
+        },
+        new()
+        {
+            Name = "Everforest", Backdrop = BackdropMode.Solid, BackgroundColor = "#2D353B", Opacity = 0.98,
+            ForegroundColor = "#D3C6AA", AccentColor = "#A7C080", PanelColor = "#343F44", PanelOpacity = 1,
+            CornerRadius = 10, BarHeight = 38, Margin = 6, IconSize = 20, IconSpacing = 6,
+            FontFamily = "Cascadia Code, Consolas", FontSize = 12.5, BorderThickness = 1, BorderColor = "#475258",
+            ClockColor = "#A7C080", DateColor = "#DBBC7F", VolumeColor = "#7FBBB3", WidgetBackground = "#3D484D", WidgetRadius = 8,
+            BorderFx = BorderFx.Snake, BorderFxColor = "#A7C080", BorderFxSpeed = 0.7
+        },
+        new()
+        {
+            // Monitor a fosfori verdi: tutto in un solo colore, cursore finto dopo l'ora e uno scanner sul bordo.
+            Name = "Phosphor CRT", Backdrop = BackdropMode.Solid, BackgroundColor = "#000F00", BackgroundColor2 = "#001A06", Opacity = 1,
+            ForegroundColor = "#33FF66", AccentColor = "#33FF66", PanelColor = "#001405", PanelOpacity = 1,
+            CornerRadius = 0, BarHeight = 32, Margin = 0, IconSize = 18, IconSpacing = 8,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 1, BorderColor = "#33FF66", BorderSides = BorderSides.DesktopSide,
+            ClockColor = "#33FF66", ClockFont = "Cascadia Mono, Consolas", ClockPrefix = "> ", ClockSuffix = " _", DateColor = "#1FA344",
+            VolumeColor = "#33FF66", IconColor = "#33FF66", IconStyle = IconStyle.Monochrome,
+            BorderFx = BorderFx.Scanner, BorderFxColor = "#7DFF9C"
+        },
+        new()
+        {
+            // Blu del prompt di PowerShell.
+            Name = "PowerShell", Backdrop = BackdropMode.Solid, BackgroundColor = "#012456", Opacity = 1,
+            ForegroundColor = "#EEEDF0", AccentColor = "#F9F1A5", PanelColor = "#012456", PanelOpacity = 1,
+            CornerRadius = 0, BarHeight = 34, Margin = 0, IconSize = 19, IconSpacing = 6,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 1, BorderColor = "#2A5CA8", BorderSides = BorderSides.DesktopSide,
+            ClockColor = "#F9F1A5", ClockFont = "Cascadia Mono, Consolas", ClockPrefix = "PS> ", DateColor = "#9BB9E8", VolumeColor = "#F9F1A5"
+        },
+        new()
+        {
+            Name = "Ubuntu Terminal", Backdrop = BackdropMode.Solid, BackgroundColor = "#300A24", Opacity = 1,
+            ForegroundColor = "#FFFFFF", AccentColor = "#E95420", PanelColor = "#2C001E", PanelOpacity = 1,
+            CornerRadius = 8, BarHeight = 36, Margin = 6, IconSize = 20, IconSpacing = 6,
+            FontFamily = "Ubuntu Mono, Cascadia Mono, Consolas", FontSize = 13,
+            BorderThickness = 1, BorderColor = "#5E2750",
+            ClockColor = "#8AE234", ClockFont = "Ubuntu Mono, Cascadia Mono, Consolas", ClockPrefix = "user@pc:~$ ", DateColor = "#729FCF",
+            VolumeColor = "#E95420", WidgetBackground = "#4A1238", WidgetRadius = 6
+        },
+        new()
+        {
+            // Rosso su nero: "root shell", icone sagomate e due comete rosse.
+            Name = "Root Shell", Backdrop = BackdropMode.Solid, BackgroundColor = "#0A0000", Opacity = 0.97,
+            ForegroundColor = "#FF5F5F", AccentColor = "#FF2A2A", PanelColor = "#120202", PanelOpacity = 1,
+            CornerRadius = 2, BarHeight = 34, Margin = 4, IconSize = 18, IconSpacing = 7,
+            FontFamily = "Cascadia Mono, Consolas", FontSize = 12.5,
+            BorderThickness = 1, BorderColor = "#4D0000",
+            ClockColor = "#FF2A2A", ClockFont = "Cascadia Mono, Consolas", ClockBold = true, ClockPrefix = "# ", DateColor = "#B33A3A",
+            VolumeColor = "#FF5F5F", IconColor = "#FF5F5F", IconStyle = IconStyle.Monochrome,
+            BorderFx = BorderFx.TwinComets, BorderFxColor = "#FF2A2A", BorderFxSpeed = 1.3
+        },
+
+        // ---- Temi divertenti -------------------------------------------------------------------
+        new()
+        {
+            // Lo stagno: acqua verde-azzurra e una famiglia di papere in passeggiata.
+            Name = "Duck Pond", Backdrop = BackdropMode.Solid, BackgroundColor = "#0E3B43", BackgroundColor2 = "#16606B", Opacity = 0.97,
+            ForegroundColor = "#E8FBFF", AccentColor = "#FFD93D", PanelColor = "#0F3A42", PanelOpacity = 1,
+            CornerRadius = 20, BarHeight = 44, Margin = 8, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Segoe UI Variable Display, Segoe UI", FontSize = 12.5,
+            BorderThickness = 1.5, BorderColor = "#5FD3E0", Shadow = true, ShadowColor = "#000000", ShadowSize = 16,
+            ClockColor = "#FFD93D", ClockBold = true, DateColor = "#A6F0F7", VolumeColor = "#FFD93D", WidgetBackground = "#1F7480", WidgetRadius = 12,
+            IconColor = "#FFD93D", BorderFx = BorderFx.DuckFamily
+        },
+        new()
+        {
+            // Setup da gaming con il bordo arcobaleno che scorre.
+            Name = "RGB Rainbow", Backdrop = BackdropMode.Solid, BackgroundColor = "#0B0B10", Opacity = 0.97,
+            ForegroundColor = "#FFFFFF", AccentColor = "#2EC5FF", PanelColor = "#101018", PanelOpacity = 1,
+            CornerRadius = 10, BarHeight = 40, Margin = 8, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Bahnschrift, Segoe UI", FontSize = 13, Shadow = true, ShadowGlow = true, ShadowColor = "#882EC5FF", ShadowSize = 18,
+            ClockColor = "#FFFFFF", ClockFont = "Bahnschrift, Segoe UI", ClockFontSize = 14, DateColor = "#FF3BD4", VolumeColor = "#3BFF6E",
+            WidgetBackground = "#1AFFFFFF", WidgetRadius = 6, BorderFx = BorderFx.Rainbow, BorderFxSpeed = 1.2
+        },
+        new()
+        {
+            Name = "Area 51", Backdrop = BackdropMode.Solid, BackgroundColor = "#05060F", BackgroundColor2 = "#101A33", Opacity = 0.97,
+            ForegroundColor = "#D7FFE4", AccentColor = "#5CFF8F", PanelColor = "#0A0F1E", PanelOpacity = 1,
+            CornerRadius = 14, BarHeight = 42, Margin = 8, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Cascadia Code, Consolas", FontSize = 12.5,
+            BorderThickness = 1, BorderColor = "#2E4A7A", Shadow = true, ShadowGlow = true, ShadowColor = "#665CFF8F", ShadowSize = 16,
+            ClockColor = "#5CFF8F", ClockFont = "Cascadia Code, Consolas", ClockPrefix = "◉ ", DateColor = "#8FA8FF", VolumeColor = "#5CFF8F",
+            IconColor = "#5CFF8F", IconStyle = IconStyle.Tinted, BorderFx = BorderFx.Ufo, BorderFxColor = "#5CFF8F"
+        },
+        new()
+        {
+            Name = "Rubber Duck", Backdrop = BackdropMode.Solid, BackgroundColor = "#FFF8D6", Opacity = 0.98,
+            ForegroundColor = "#4A3B00", AccentColor = "#FF8C1A", PanelColor = "#FFFBE8", PanelOpacity = 1,
+            CornerRadius = 22, BarHeight = 42, Margin = 10, IconSize = 21, IconSpacing = 6,
+            FontFamily = "Segoe UI Variable Display, Segoe UI", FontSize = 12.5,
+            BorderThickness = 2, BorderColor = "#FFD93D", Shadow = true, ShadowColor = "#55C9A400", ShadowSize = 18,
+            ClockColor = "#FF8C1A", ClockBold = true, DateColor = "#8A6D00", VolumeColor = "#FF8C1A", WidgetBackground = "#26FFD93D", WidgetRadius = 14,
+            BorderFx = BorderFx.Duck, BorderFxSpeed = 1.2
+        },
     };
 
     // ---- Colori ---------------------------------------------------------------------------------
@@ -292,6 +476,15 @@ public static class ThemeService
         res["PanelHoverBrush"] = Brush(WithAlpha(panelFg, 0.09));
         res["PanelPressedBrush"] = Brush(WithAlpha(panelFg, 0.16));
         res["PanelBorderBrush"] = Brush(WithAlpha(panelFg, 0.12));
+
+        // Icone: i glifi della barra usano IconBrush; le icone delle app (bitmap) possono essere velate o ridotte a una
+        // sagoma in tinta unita, disegnando sopra un rettangolo colorato che usa l'icona stessa come maschera.
+        Color icon = string.IsNullOrWhiteSpace(t.IconColor) ? fg : ParseColor(t.IconColor, fg);
+        res["IconBrush"] = Brush(icon);
+        res["AppIconTintBrush"] = Brush(Color.FromRgb(icon.R, icon.G, icon.B));
+        res["AppIconImageOpacity"] = t.IconStyle == IconStyle.Monochrome ? 0.0 : 1.0;
+        res["AppIconTintOpacity"] = t.IconStyle switch { IconStyle.Monochrome => 1.0, IconStyle.Tinted => 0.55, _ => 0.0 };
+        res["AppIconTintVisibility"] = t.IconStyle == IconStyle.Original ? Visibility.Collapsed : Visibility.Visible;
 
         FontFamily font;
         try { font = new FontFamily(string.IsNullOrWhiteSpace(t.FontFamily) ? "Segoe UI" : t.FontFamily); }

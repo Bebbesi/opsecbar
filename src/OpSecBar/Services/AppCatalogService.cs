@@ -115,15 +115,13 @@ public sealed class AppCatalogService
 
     // ---- Avvio ---------------------------------------------------------------------------------
 
-    public static void Launch(PinnedApp app, bool asAdmin = false)
+    /// <summary>Avvia l'app. Restituisce false solo se l'avvio come amministratore non è supportato da quell'app.</summary>
+    public static bool Launch(PinnedApp app, bool asAdmin = false)
     {
+        if (asAdmin) return RunAsAdmin(app);
         try
         {
-            if (asAdmin && !string.IsNullOrEmpty(app.TargetPath))
-            {
-                Process.Start(new ProcessStartInfo(app.TargetPath) { UseShellExecute = true, Verb = "runas" });
-            }
-            else if (!string.IsNullOrEmpty(app.AppId))
+            if (!string.IsNullOrEmpty(app.AppId))
             {
                 Process.Start(new ProcessStartInfo("explorer.exe", "shell:AppsFolder\\" + app.AppId) { UseShellExecute = false });
             }
@@ -138,6 +136,39 @@ public sealed class AppCatalogService
         }
         catch (System.ComponentModel.Win32Exception) { /* annullato dall'utente (UAC) o file mancante */ }
         catch (Exception ex) { Log.Error($"Avvio di {app.Name} fallito", ex); }
+        return true;
+    }
+
+    private const int ErrorCancelled = 1223; // l'utente ha rifiutato il prompt UAC
+
+    /// <summary>
+    /// Avvio con privilegi elevati per qualsiasi voce del menu Start: prima il file di destinazione (exe, bat, cmd,
+    /// msc...), poi la voce di shell:AppsFolder, che espone il verbo "runas" per le app Win32 e per le app
+    /// pacchettizzate che lo dichiarano (es. Windows Terminal). False se l'app non può essere elevata.
+    /// </summary>
+    private static bool RunAsAdmin(PinnedApp app)
+    {
+        var attempts = new List<ProcessStartInfo>();
+        if (!string.IsNullOrEmpty(app.TargetPath) && System.IO.File.Exists(app.TargetPath))
+            attempts.Add(new ProcessStartInfo(app.TargetPath)
+            {
+                UseShellExecute = true, Verb = "runas",
+                WorkingDirectory = System.IO.Path.GetDirectoryName(app.TargetPath) ?? ""
+            });
+        if (!string.IsNullOrEmpty(app.AppId))
+            attempts.Add(new ProcessStartInfo("shell:AppsFolder\\" + app.AppId) { UseShellExecute = true, Verb = "runas" });
+
+        foreach (ProcessStartInfo psi in attempts)
+        {
+            try
+            {
+                Process.Start(psi);
+                return true;
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled) { return true; }
+            catch (Exception ex) { Log.Warn($"Esegui come amministratore ({app.Name}, {psi.FileName}): {ex.Message}"); }
+        }
+        return false;
     }
 
     public static void OpenFileLocation(string? path)

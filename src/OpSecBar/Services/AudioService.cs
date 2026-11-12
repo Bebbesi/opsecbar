@@ -63,6 +63,9 @@ public sealed class AudioService
         Poll();
     }
 
+    /// <summary>Legge subito volume e mute (anche se il widget del volume è spento).</summary>
+    public void PollNow() => Poll();
+
     private void Poll()
     {
         // Il dispositivo predefinito può cambiare (cuffie, HDMI...): ogni tanto lo si richiede da capo.

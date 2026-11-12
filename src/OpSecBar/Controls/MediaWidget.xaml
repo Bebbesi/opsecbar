@@ -42,13 +42,13 @@
                 </StackPanel>
             </Button>
             <Button x:Name="PrevButton" Style="{StaticResource BarButton}" Padding="5,0" MinWidth="26" Click="Prev_Click" ToolTip="Previous">
-                <TextBlock Style="{StaticResource Glyph}" Text="&#xE892;" FontSize="11" />
+                <TextBlock Style="{StaticResource Glyph}" Text="&#xE892;" FontSize="11" Foreground="{DynamicResource IconBrush}" />
             </Button>
             <Button x:Name="PlayButton" Style="{StaticResource BarButton}" Padding="5,0" MinWidth="26" Click="Play_Click" ToolTip="Play / Pause">
-                <TextBlock x:Name="PlayGlyph" Style="{StaticResource Glyph}" Text="&#xE768;" FontSize="12" />
+                <TextBlock x:Name="PlayGlyph" Style="{StaticResource Glyph}" Text="&#xE768;" FontSize="12" Foreground="{DynamicResource IconBrush}" />
             </Button>
             <Button x:Name="NextButton" Style="{StaticResource BarButton}" Padding="5,0" MinWidth="26" Click="Next_Click" ToolTip="Next">
-                <TextBlock Style="{StaticResource Glyph}" Text="&#xE893;" FontSize="11" />
+                <TextBlock Style="{StaticResource Glyph}" Text="&#xE893;" FontSize="11" Foreground="{DynamicResource IconBrush}" />
             </Button>
             <StackPanel x:Name="Equalizer" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,6,0" Opacity="0.35">
                 <Rectangle x:Name="Eq1" Style="{StaticResource EqBar}"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.4" /></Rectangle.RenderTransform></Rectangle>
@@ -84,8 +84,8 @@
                     </Grid>
 
                     <StackPanel x:Name="TimelinePanel" Margin="0,14,0,0">
-                        <Slider x:Name="Seek" Style="{StaticResource SeekSlider}" PreviewMouseLeftButtonDown="Seek_Down"
-                                PreviewMouseLeftButtonUp="Seek_Up" LostMouseCapture="Seek_LostCapture" />
+                        <Slider x:Name="Seek" Style="{StaticResource SeekSlider}" ValueChanged="Seek_ValueChanged"
+                                LostMouseCapture="Seek_LostCapture" />
                         <Grid Margin="0,2,0,0">
                             <TextBlock x:Name="PositionText" FontSize="11" Foreground="{DynamicResource PanelFgDimBrush}" />
                             <TextBlock x:Name="DurationText" FontSize="11" HorizontalAlignment="Right" Foreground="{DynamicResource PanelFgDimBrush}" />
@@ -93,6 +93,14 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                        <Button x:Name="ShuffleButton" Style="{StaticResource PanelButton}" Width="36" Height="36" Margin="0,0,8,0"
+                                Click="Shuffle_Click" ToolTip="Shuffle">
+                            <Grid>
+                                <TextBlock x:Name="ShuffleGlyph" Style="{StaticResource Glyph}" Text="&#xE8B1;" FontSize="14" />
+                                <Ellipse x:Name="ShuffleDot" Width="4" Height="4" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Bottom"
+                                         HorizontalAlignment="Center" Margin="0,0,0,-7" Visibility="Hidden" />
+                            </Grid>
+                        </Button>
                         <Button x:Name="FlyPrev" Style="{StaticResource PanelButton}" Width="40" Height="40" Click="Prev_Click" ToolTip="Previous">
                             <TextBlock Style="{StaticResource Glyph}" Text="&#xE892;" FontSize="15" />
                         </Button>
@@ -115,7 +123,26 @@
                         <Button x:Name="FlyNext" Style="{StaticResource PanelButton}" Width="40" Height="40" Click="Next_Click" ToolTip="Next">
                             <TextBlock Style="{StaticResource Glyph}" Text="&#xE893;" FontSize="15" />
                         </Button>
+                        <Button x:Name="RepeatButton" Style="{StaticResource PanelButton}" Width="36" Height="36" Margin="8,0,0,0"
+                                Click="Repeat_Click" ToolTip="Repeat">
+                            <Grid>
+                                <TextBlock x:Name="RepeatGlyph" Style="{StaticResource Glyph}" Text="&#xE8EE;" FontSize="14" />
+                                <Ellipse x:Name="RepeatDot" Width="4" Height="4" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Bottom"
+                                         HorizontalAlignment="Center" Margin="0,0,0,-7" Visibility="Hidden" />
+                            </Grid>
+                        </Button>
                     </StackPanel>
+
+                    <!-- Volume dell'app che sta riproducendo (o di sistema, se l'app non è riconoscibile) -->
+                    <DockPanel x:Name="VolumeRow" Margin="0,12,0,0">
+                        <Button x:Name="MediaMuteButton" Style="{StaticResource PanelButton}" Padding="7" Click="MediaMute_Click" ToolTip="Mute">
+                            <TextBlock x:Name="MediaMuteGlyph" Style="{StaticResource Glyph}" Text="&#xE995;" FontSize="14" />
+                        </Button>
+                        <TextBlock x:Name="MediaVolumeText" DockPanel.Dock="Right" Width="34" TextAlignment="Right" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="{DynamicResource PanelFgDimBrush}" />
+                        <Slider x:Name="MediaVolume" Style="{StaticResource SeekSlider}" Minimum="0" Maximum="100" Margin="8,0,4,0"
+                                VerticalAlignment="Center" ValueChanged="MediaVolume_ValueChanged" PreviewMouseWheel="MediaVolume_Wheel" />
+                    </DockPanel>
                 </StackPanel>
             </Border>
         </Popup>

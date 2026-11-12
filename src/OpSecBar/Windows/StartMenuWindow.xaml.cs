@@ -271,8 +271,13 @@ public partial class StartMenuWindow : Window
     private void Launch(AppEntry app, bool asAdmin = false)
     {
         HideMenu();
-        AppCatalogService.Launch(app.ToPinned(), asAdmin);
+        if (!AppCatalogService.Launch(app.ToPinned(), asAdmin))
+            MessageBox.Show($"\"{app.Name}\" can't be run as administrator.\nWindows doesn't allow elevating this app.",
+                "OpSec Bar", MessageBoxButton.OK, MessageBoxImage.Information);
     }
+
+    private static bool AdminModifiers =>
+        (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) == (ModifierKeys.Control | ModifierKeys.Shift);
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -284,8 +289,9 @@ public partial class StartMenuWindow : Window
                 e.Handled = true;
                 break;
             case Key.Enter:
+                // Ctrl+Maiusc+Invio: come amministratore (come nel menu Start di Windows).
                 if ((AppList.SelectedItem ?? (SearchBox.Text.Length > 0 && AppList.Items.Count > 0 ? AppList.Items[0] : null)) is AppEntry app)
-                    Launch(app);
+                    Launch(app, AdminModifiers);
                 e.Handled = true;
                 break;
             case Key.Down:
@@ -301,7 +307,7 @@ public partial class StartMenuWindow : Window
 
     private void AppRow_Click(object sender, MouseButtonEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is AppEntry app) Launch(app);
+        if ((sender as FrameworkElement)?.DataContext is AppEntry app) Launch(app, AdminModifiers);
     }
 
     private void AppRow_RightClick(object sender, MouseButtonEventArgs e)
@@ -315,7 +321,7 @@ public partial class StartMenuWindow : Window
 
     private void Favorite_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is AppEntry app) Launch(app);
+        if ((sender as FrameworkElement)?.DataContext is AppEntry app) Launch(app, AdminModifiers);
     }
 
     private void Favorite_RightClick(object sender, MouseButtonEventArgs e)
@@ -334,8 +340,9 @@ public partial class StartMenuWindow : Window
         var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.MousePoint };
 
         menu.Items.Add(Ui.MenuEntry("Open", "", () => Launch(app)));
-        if (!string.IsNullOrEmpty(app.TargetPath) && app.TargetPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            menu.Items.Add(Ui.MenuEntry("Run as administrator", "", () => Launch(app, true)));
+        // Per ogni app (anche Ctrl+Maiusc+click/Invio); se Windows non permette di elevarla lo si dice all'utente.
+        var admin = Ui.MenuEntry("Run as administrator", "", () => Launch(app, true));
+        menu.Items.Add(admin);
         menu.Items.Add(new Separator());
 
         bool isFavorite = s.StartFavorites.Any(f => f.Key == pinned.Key);

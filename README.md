@@ -31,12 +31,14 @@ original taskbar automatically in every situation: normal exit, crash, or being 
 - **Never kills Explorer**: the Windows taskbar is hidden and reliably restored.
 - **Three clear zones**: apps on the left, media player in the center, clock / tray / Start on the right.
 - **Its own Start menu**, also opened by the Windows key.
-- **Built-in media player** (Spotify, browsers, VLC…) through the Windows media controls.
+- **Built-in media player** (Spotify, browsers, VLC…) through the Windows media controls, with seek, shuffle, repeat and per-app volume.
 - **Real system tray**, including a panel for hidden icons.
 - **Full customization**: colors (with an eyedropper and recent colors), gradients, opacity, blur / acrylic / glass, corners, margins, borders, neon glow, fonts, position, multiple monitors.
 - **Styled widgets**: clock, date and volume with their own colors, fonts and formats.
 - **Animated GIFs** on the bar: drop them in Settings or straight onto the bar.
-- **Themes**: 25 built-in (Cyberpunk, Lofi, Soft, Gaming, Synthwave…) and custom, importable and exportable as `.json`.
+- **Themes**: 42 built-in (Cyberpunk, Lofi, Gaming, terminal palettes like Gruvbox, Tokyo Night, Catppuccin, Solarized, Phosphor CRT…) and custom, importable and exportable as `.json`.
+- **Icon colors**: one color for all bar glyphs, and app icons in original colors, tinted or as monochrome silhouettes.
+- **Animated borders**: minimal (pulse, comet, marching ants, scanner, rainbow) or fun (a duck, a duck family, a snake, fireflies, a UFO) walking around the bar.
 - **Lightweight**: built to run all day with a small memory footprint.
 
 ## Requirements
