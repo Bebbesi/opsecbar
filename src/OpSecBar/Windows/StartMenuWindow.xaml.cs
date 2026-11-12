@@ -131,26 +131,37 @@ public partial class StartMenuWindow : Window
             int w = self.Width, h = self.Height;
 
             Point a = _anchor.PointToScreen(new Point(0, 0));
+            int anchorLeft = (int)a.X, anchorTop = (int)a.Y;
             int anchorRight = (int)(a.X + _anchor.ActualWidth * scale);
             int anchorBottom = (int)(a.Y + _anchor.ActualHeight * scale);
+
+            // Lungo la barra il menu si allinea al lato in cui si trova il pulsante (che il layout avanzato può mettere
+            // ovunque): all'inizio parte dal pulsante, al centro gli sta sopra centrato, alla fine termina con lui.
+            static int Along(int from, int to, int barFrom, int barTo, int size, int pad)
+            {
+                int middle = (from + to) / 2, third = (barTo - barFrom) / 3;
+                if (middle < barFrom + third) return from - pad;
+                if (middle > barTo - third) return to - size + pad;
+                return middle - size / 2;
+            }
 
             int x, y;
             switch (_bar.AppBarEdge)
             {
                 case AppBarEdge.Bottom:
-                    x = anchorRight - w + pad;
+                    x = Along(anchorLeft, anchorRight, barRect.Left, barRect.Right, w, pad);
                     y = barRect.Top - h + pad - gap;
                     break;
                 case AppBarEdge.Left:
                     x = barRect.Right - pad + gap;
-                    y = anchorBottom - h + pad;
+                    y = Along(anchorTop, anchorBottom, barRect.Top, barRect.Bottom, h, pad);
                     break;
                 case AppBarEdge.Right:
                     x = barRect.Left - w + pad - gap;
-                    y = anchorBottom - h + pad;
+                    y = Along(anchorTop, anchorBottom, barRect.Top, barRect.Bottom, h, pad);
                     break;
                 default:
-                    x = anchorRight - w + pad;
+                    x = Along(anchorLeft, anchorRight, barRect.Left, barRect.Right, w, pad);
                     y = barRect.Bottom - pad + gap;
                     break;
             }

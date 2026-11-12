@@ -31,6 +31,7 @@ public partial class SettingsWindow : Window
     private static readonly (string Title, string Glyph)[] Pages =
     {
         ("Appearance", ""), ("Themes", ""), ("Behavior", ""), ("Taskbar items", ""),
+        ("Layout", "\uE90E"),
         ("Pinned apps", ""), ("System tray", ""), ("Start menu", ""), ("Widgets", "\uE823"), ("GIFs", "\uE8B9"),
         ("System", "")
     };
@@ -182,6 +183,7 @@ public partial class SettingsWindow : Window
                 case "Themes": BuildThemes(); break;
                 case "Behavior": BuildBehavior(); break;
                 case "Taskbar items": BuildItems(); break;
+                case "Layout": BuildLayout(); break;
                 case "Pinned apps": BuildPinnedApps(); break;
                 case "System tray": BuildTray(); break;
                 case "Start menu": BuildStartMenu(); break;
@@ -509,6 +511,9 @@ public partial class SettingsWindow : Window
     {
         PageTitle("Taskbar items");
 
+        var arrange = Card();
+        Row(arrange, "Arrange items", "Choose where each item sits on the bar.", Btn("Open Layout", () => ShowPage("Layout")));
+
         var apps = Section("Apps");
         Row(apps, "Pinned apps", null, Toggle(S.ShowPinnedApps, v => S.ShowPinnedApps = v));
         Row(apps, "Running apps", null, Toggle(S.ShowRunningApps, v => S.ShowRunningApps = v));
@@ -530,6 +535,279 @@ public partial class SettingsWindow : Window
         Row(other, "Quick settings button", "Opens Windows quick settings for Wi‑Fi, sound and brightness.", Toggle(S.ShowQuickSettings, v => S.ShowQuickSettings = v));
         Row(other, "Start button", null, Toggle(S.ShowStartButton, v => S.ShowStartButton = v));
         Row(other, "System monitor", "CPU, memory and battery.", Toggle(S.ShowSysInfo, v => S.ShowSysInfo = v));
+    }
+
+    // ---- Layout avanzato: l'utente decide in quale zona della barra sta ogni elemento, e in che ordine ----
+
+    private const string LayoutDragFormat = "OpSecBar.LayoutWidget";
+    private Border? _dropMarker;
+    private int _dropMarkerIndex = -1;
+
+    private static readonly (BarWidget Widget, string Name, string Glyph)[] LayoutWidgets =
+    {
+        (BarWidget.Apps, "App icons", ""), (BarWidget.Media, "Media player", ""), (BarWidget.Gifs, "GIFs", ""),
+        (BarWidget.SysInfo, "System monitor", ""), (BarWidget.Volume, "Volume", ""),
+        (BarWidget.Clock, "Clock and calendar", ""), (BarWidget.Tray, "System tray", ""),
+        (BarWidget.QuickSettings, "Quick settings", ""), (BarWidget.Start, "Start button", "")
+    };
+
+    /// <summary>Vero se l'elemento è acceso (in "Taskbar items"): quelli spenti si possono disporre lo stesso, ma appaiono attenuati.</summary>
+    private bool WidgetShown(BarWidget widget) => widget switch
+    {
+        BarWidget.Apps => S.ShowPinnedApps || S.ShowRunningApps,
+        BarWidget.Media => S.ShowMediaPlayer,
+        BarWidget.Gifs => S.Gifs.Any(g => g.Enabled),
+        BarWidget.SysInfo => S.ShowSysInfo,
+        BarWidget.Volume => S.ShowVolume,
+        BarWidget.Clock => S.ShowClock,
+        BarWidget.Tray => S.ShowTray,
+        BarWidget.QuickSettings => S.ShowQuickSettings,
+        _ => S.ShowStartButton
+    };
+
+    private void BuildLayout()
+    {
+        PageTitle("Layout");
+
+        var mode = Card();
+        Row(mode, "Advanced layout", "Decide where every item sits on the bar. When off, items keep the classic arrangement.",
+            Toggle(S.AdvancedLayout, v =>
+            {
+                // La prima volta si parte dalla disposizione classica: attivarlo non sposta nulla.
+                if (v && S.Layout == null) S.Layout = BarLayout.Default(S.GifPlacement);
+                S.AdvancedLayout = v;
+                Refresh();
+            }));
+
+        bool on = S.AdvancedLayout && S.Layout != null;
+        BarLayout layout = S.EffectiveLayout;
+        // Le zone seguono la barra: sinistra/centro/destra se è orizzontale, alto/mezzo/basso se è verticale.
+        bool vertical = S.Position is BarPosition.Left or BarPosition.Right;
+        var zones = new[]
+        {
+            (BarZone.Start, vertical ? "Top" : "Left"), (BarZone.Center, vertical ? "Middle" : "Center"), (BarZone.End, vertical ? "Bottom" : "Right")
+        };
+
+        SectionHeader("Arrange items", on
+            ? "Drag an item to a new spot, or right-click it for more options. The bar updates as you go."
+            : "Turn on Advanced layout to move these items.");
+        _dropMarker = new Border
+        {
+            // Larghezza netta zero (margini negativi): mostrare il segnaposto non sposta gli elementi vicini.
+            Width = 2, Height = 26, CornerRadius = new CornerRadius(1), Margin = new Thickness(-5, 0, 3, 0),
+            Background = (Brush)FindResource("S.Accent"), IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Center
+        };
+        _dropMarkerIndex = -1;
+        var card = Card();
+        foreach (var (zone, label) in zones) LayoutZoneRow(card, layout, zone, label, zones, on);
+        PageHost.Children.Add(new TextBlock
+        {
+            Text = "Dimmed items are turned off. Turn them on in Taskbar items.", FontSize = 12, TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("S.Text2"), Margin = new Thickness(1, 8, 0, 0)
+        });
+
+        if (!on) return;
+        var presets = Section("Start from a preset");
+        Row(presets, "Classic", "Apps on the left, media player in the middle, system items on the right.",
+            Btn("Apply", () => SetLayout(BarLayout.Default(S.GifPlacement))));
+        Row(presets, "Centered", "Start button and apps in the middle, like Windows 11.", Btn("Apply", () => SetLayout(BarLayout.Centered())));
+    }
+
+    private void SetLayout(BarLayout layout)
+    {
+        S.Layout = layout;
+        _app.SettingsService.Notify(nameof(AppSettings.Layout));
+        Refresh();
+    }
+
+    /// <summary>Una zona della barra: etichetta + area in cui trascinare gli elementi.</summary>
+    private void LayoutZoneRow(Panel card, BarLayout layout, BarZone zone, string label, (BarZone Zone, string Label)[] zones, bool enabled)
+    {
+        var chips = new WrapPanel { Margin = new Thickness(8, 4, 0, 4), VerticalAlignment = VerticalAlignment.Center };
+        foreach (BarWidget widget in layout[zone]) chips.Children.Add(LayoutChip(widget, zone, zones, enabled));
+        if (layout[zone].Count == 0)
+            chips.Children.Add(new TextBlock
+            {
+                Text = enabled ? "Nothing here. Drop an item to place it." : "Nothing here.", FontSize = 12,
+                Foreground = (Brush)FindResource("S.Text3"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 12, 0, 12)
+            });
+
+        var drop = new Border
+        {
+            CornerRadius = new CornerRadius(4), Background = Brushes.Transparent, MinHeight = 48, Child = chips,
+            AllowDrop = enabled, Opacity = enabled ? 1 : 0.55
+        };
+        if (enabled)
+        {
+            drop.DragOver += (_, e) =>
+            {
+                e.Handled = true;
+                if (!e.Data.GetDataPresent(LayoutDragFormat))
+                {
+                    e.Effects = DragDropEffects.None;
+                    return;
+                }
+                e.Effects = DragDropEffects.Move;
+                drop.Background = (Brush)FindResource("S.SubtleHover");
+                ShowDropMarker(chips, LayoutInsertIndex(chips, e.GetPosition(chips)));
+            };
+            drop.DragLeave += (_, e) =>
+            {
+                // L'evento arriva anche passando da un elemento all'altro dentro la stessa zona: lì non si fa nulla.
+                Point p = e.GetPosition(drop);
+                if (p.X > 0 && p.Y > 0 && p.X < drop.ActualWidth && p.Y < drop.ActualHeight) return;
+                drop.Background = Brushes.Transparent;
+                HideDropMarker();
+            };
+            drop.Drop += (_, e) =>
+            {
+                e.Handled = true;
+                int index = LayoutInsertIndex(chips, e.GetPosition(chips));
+                drop.Background = Brushes.Transparent;
+                HideDropMarker();
+                if (e.Data.GetData(LayoutDragFormat) is string name && Enum.TryParse(name, out BarWidget widget))
+                    Safe(() => MoveLayoutWidget(widget, zone, index));
+            };
+        }
+
+        var grid = new Grid { Margin = new Thickness(16, 6, 10, 6) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        Grid.SetColumn(drop, 1);
+        grid.Children.Add(drop);
+
+        if (card.Children.Count > 0) card.Children.Add(new Border { Height = 1, Background = (Brush)FindResource("S.Divider") });
+        card.Children.Add(grid);
+    }
+
+    /// <summary>Un elemento della barra, da trascinare in un'altra posizione (o da spostare dal menu del tasto destro).</summary>
+    private FrameworkElement LayoutChip(BarWidget widget, BarZone zone, (BarZone Zone, string Label)[] zones, bool enabled)
+    {
+        var info = LayoutWidgets.First(w => w.Widget == widget);
+        bool shown = WidgetShown(widget);
+        double opacity = shown ? 1 : 0.45;
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(new TextBlock
+        {
+            Text = info.Glyph, FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 14, Margin = new Thickness(0, 0, 8, 0),
+            Foreground = (Brush)FindResource("S.Text2"), VerticalAlignment = VerticalAlignment.Center
+        });
+        content.Children.Add(new TextBlock { Text = info.Name, VerticalAlignment = VerticalAlignment.Center });
+
+        var chip = new Border
+        {
+            Tag = widget, Child = content, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
+            Background = (Brush)FindResource("S.Control"), BorderBrush = (Brush)FindResource("S.ControlStroke"),
+            Padding = new Thickness(10, 6, 12, 7), Margin = new Thickness(0, 4, 8, 4), Opacity = opacity,
+            ToolTip = shown ? null : widget == BarWidget.Gifs ? "No GIFs to show. Add some in GIFs." : "Turned off. Turn it on in Taskbar items."
+        };
+        if (!enabled) return chip;
+
+        chip.Cursor = Cursors.SizeAll;
+        chip.MouseEnter += (_, _) => chip.Background = (Brush)FindResource("S.ControlHover");
+        chip.MouseLeave += (_, _) => chip.Background = (Brush)FindResource("S.Control");
+
+        // Trascinamento: parte quando il mouse, premuto sull'elemento, si è mosso di qualche pixel.
+        Point? pressed = null;
+        chip.MouseLeftButtonDown += (_, e) =>
+        {
+            pressed = e.GetPosition(chip);
+            chip.CaptureMouse();
+        };
+        chip.MouseLeftButtonUp += (_, _) =>
+        {
+            pressed = null;
+            chip.ReleaseMouseCapture();
+        };
+        chip.MouseMove += (_, e) =>
+        {
+            if (pressed is not { } from || e.LeftButton != MouseButtonState.Pressed) return;
+            Point now = e.GetPosition(chip);
+            if (Math.Abs(now.X - from.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(now.Y - from.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            pressed = null;
+            chip.ReleaseMouseCapture();
+            chip.Opacity = 0.3;
+            try { DragDrop.DoDragDrop(chip, new DataObject(LayoutDragFormat, widget.ToString()), DragDropEffects.Move); }
+            catch (Exception ex) { Log.Error("Trascinamento elemento del layout", ex); }
+            finally
+            {
+                chip.Opacity = opacity;
+                HideDropMarker();
+            }
+        };
+
+        chip.MouseRightButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (S.Layout is not { } layout) return;
+            List<BarWidget> list = layout[zone];
+            int at = list.IndexOf(widget);
+            var menu = new ContextMenu { PlacementTarget = chip, Placement = PlacementMode.Bottom };
+            foreach (var (other, label) in zones)
+                if (other != zone)
+                    menu.Items.Add(Ui.MenuEntry($"Move to the {label.ToLowerInvariant()}", "", () => MoveLayoutWidget(widget, other, layout[other].Count)));
+            if (list.Count > 1)
+            {
+                menu.Items.Add(new Separator());
+                // L'indice è quello di inserimento prima di togliere l'elemento: "dopo il successivo" è at + 2.
+                if (at > 0) menu.Items.Add(Ui.MenuEntry("Move earlier", "", () => MoveLayoutWidget(widget, zone, at - 1)));
+                if (at < list.Count - 1) menu.Items.Add(Ui.MenuEntry("Move later", "", () => MoveLayoutWidget(widget, zone, at + 2)));
+            }
+            menu.IsOpen = true;
+        };
+        return chip;
+    }
+
+    private static List<FrameworkElement> LayoutChips(Panel panel) =>
+        panel.Children.OfType<FrameworkElement>().Where(c => c.Tag is BarWidget).ToList();
+
+    /// <summary>Posizione (tra gli elementi della zona) in cui finirebbe ciò che viene rilasciato nel punto indicato.</summary>
+    private static int LayoutInsertIndex(Panel panel, Point point)
+    {
+        int index = 0;
+        foreach (FrameworkElement chip in LayoutChips(panel))
+        {
+            Point origin = chip.TranslatePoint(new Point(0, 0), panel);
+            if (point.Y < origin.Y - chip.Margin.Top) return index; // il punto è su una riga precedente
+            bool sameRow = point.Y <= origin.Y + chip.ActualHeight + chip.Margin.Bottom;
+            if (sameRow && point.X < origin.X + chip.ActualWidth / 2) return index;
+            index++;
+        }
+        return index;
+    }
+
+    /// <summary>Mostra la lineetta d'accento nel punto in cui verrà inserito l'elemento trascinato.</summary>
+    private void ShowDropMarker(Panel panel, int index)
+    {
+        if (_dropMarker == null || (ReferenceEquals(_dropMarker.Parent, panel) && _dropMarkerIndex == index)) return;
+        HideDropMarker();
+        var chips = LayoutChips(panel);
+        if (index < chips.Count) panel.Children.Insert(panel.Children.IndexOf(chips[index]), _dropMarker);
+        else panel.Children.Add(_dropMarker);
+        _dropMarkerIndex = index;
+    }
+
+    private void HideDropMarker()
+    {
+        (_dropMarker?.Parent as Panel)?.Children.Remove(_dropMarker);
+        _dropMarkerIndex = -1;
+    }
+
+    /// <summary>Sposta un elemento in una zona, alla posizione indicata (contata prima di toglierlo da dov'era).</summary>
+    private void MoveLayoutWidget(BarWidget widget, BarZone zone, int index)
+    {
+        if (S.Layout is not { } layout) return;
+        List<BarWidget> target = layout[zone];
+        int current = target.IndexOf(widget);
+        if (current >= 0 && current < index) index--; // togliendolo, ciò che lo segue scala di un posto
+        foreach (BarZone z in Enum.GetValues<BarZone>()) layout[z].Remove(widget);
+        target.Insert(Math.Clamp(index, 0, target.Count), widget);
+        _app.SettingsService.Notify(nameof(AppSettings.Layout));
+        // La pagina si ricostruisce a trascinamento concluso: questo codice può girare dentro DoDragDrop.
+        Dispatcher.BeginInvoke(Refresh);
     }
 
     private void BuildPinnedApps()
@@ -812,10 +1090,13 @@ public partial class SettingsWindow : Window
         PageHost.Children.Add(zone);
 
         var display = Section("Display");
-        Row(display, "Position", null, ComboCtl(new[]
-        {
-            (GifPlacement.Left, "Left, before the apps"), (GifPlacement.Center, "Center"), (GifPlacement.Right, "Right, before the clock")
-        }, S.GifPlacement, v => S.GifPlacement = v, 220));
+        if (S.AdvancedLayout)
+            Row(display, "Position", "Set by the advanced layout.", Btn("Open Layout", () => ShowPage("Layout")));
+        else
+            Row(display, "Position", null, ComboCtl(new[]
+            {
+                (GifPlacement.Left, "Left, before the apps"), (GifPlacement.Center, "Center"), (GifPlacement.Right, "Right, before the clock")
+            }, S.GifPlacement, v => S.GifPlacement = v, 220));
         Row(display, "Size", "0 = fit the bar height.", SliderCtl(S.GifSize, 0, 96, 1, "0 px", v => S.GifSize = v));
 
         SectionHeader("Your GIFs", "Turn a GIF off to keep it here without showing it on the bar.");

@@ -54,7 +54,6 @@ public partial class TaskbarWindow : AppBarWindow
         Tray.OverflowOpenChanged += OnPopupStateChanged;
         app.SysInfo.Updated += UpdateSysInfo;
         app.Audio.Changed += UpdateVolume;
-        CenterPanel.Children.Add(_centerGifHost);
 
         ApplyLayout();
         ApplyElements();
@@ -99,61 +98,67 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void ApplyLayout()
     {
-        LayoutGrid.ColumnDefinitions.Clear();
-        LayoutGrid.RowDefinitions.Clear();
-
+        WidgetPanel.Orientation = Orientation;
         if (IsHorizontal)
         {
-            LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(LeftDock, 0);
-            Grid.SetColumn(CenterPanel, 1);
-            Grid.SetColumn(RightPanel, 2);
-            LayoutGrid.Margin = new Thickness(6, 0, 6, 0);
-            TasksScroll.HorizontalAlignment = HorizontalAlignment.Left;
-            LeftDock.HorizontalAlignment = HorizontalAlignment.Left;
+            WidgetPanel.Margin = new Thickness(6, 0, 6, 0);
+            return;
         }
-        else
+
+        WidgetPanel.Margin = new Thickness(0, 6, 0, 6);
+        GifHost.Orientation = Orientation.Vertical;
+        GifHost.HorizontalAlignment = HorizontalAlignment.Center;
+        VolumePanel.Orientation = Orientation.Vertical;
+        VolumeText.Margin = new Thickness(0, 3, 0, 0);
+        VolumeText.FontSize = 10;
+
+        TasksScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        TasksScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
+        TasksScroll.HorizontalAlignment = HorizontalAlignment.Center;
+
+        ClockPanel.Orientation = Orientation.Vertical;
+        ClockDate.Margin = new Thickness(0);
+        ClockDate.FontSize = 10;
+        ClockDate.TextAlignment = TextAlignment.Center;
+        SysInfoText.Margin = new Thickness(0, 6, 0, 6);
+        SysInfoText.FontSize = 10;
+
+        foreach (Button b in new[] { ClockButton, VolumeButton, QuickButton, StartButton })
         {
-            LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(LeftDock, 0);
-            Grid.SetRow(CenterPanel, 1);
-            Grid.SetRow(RightPanel, 2);
-            LayoutGrid.Margin = new Thickness(0, 6, 0, 6);
-            DockPanel.SetDock(LeftGifHost, Dock.Top);
-            LeftGifHost.Orientation = Orientation.Vertical;
-            LeftGifHost.HorizontalAlignment = HorizontalAlignment.Center;
-            RightGifHost.Orientation = Orientation.Vertical;
-            RightGifHost.HorizontalAlignment = HorizontalAlignment.Center;
-            _centerGifHost.Orientation = Orientation.Vertical;
-            VolumePanel.Orientation = Orientation.Vertical;
-            VolumeText.Margin = new Thickness(0, 3, 0, 0);
-            VolumeText.FontSize = 10;
+            b.Padding = new Thickness(0, 7, 0, 7);
+            b.Margin = new Thickness(3, 1, 3, 1);
+            b.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+    }
 
-            TasksScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            TasksScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
-            TasksScroll.VerticalAlignment = VerticalAlignment.Top;
-            TasksScroll.HorizontalAlignment = HorizontalAlignment.Center;
+    private FrameworkElement ElementOf(BarWidget widget) => widget switch
+    {
+        BarWidget.Apps => TasksScroll,
+        BarWidget.Media => Media,
+        BarWidget.Gifs => GifHost,
+        BarWidget.SysInfo => SysInfoText,
+        BarWidget.Volume => VolumeButton,
+        BarWidget.Clock => ClockButton,
+        BarWidget.Tray => Tray,
+        BarWidget.QuickSettings => QuickButton,
+        _ => StartButton
+    };
 
-            CenterPanel.Orientation = Orientation.Vertical;
-            RightPanel.Orientation = Orientation.Vertical;
-            RightPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            RightPanel.VerticalAlignment = VerticalAlignment.Bottom;
-            ClockPanel.Orientation = Orientation.Vertical;
-            ClockDate.Margin = new Thickness(0);
-            ClockDate.FontSize = 10;
-            ClockDate.TextAlignment = TextAlignment.Center;
-            SysInfoText.Margin = new Thickness(0, 6, 0, 6);
-            SysInfoText.FontSize = 10;
-
-            foreach (Button b in new[] { ClockButton, VolumeButton, QuickButton, StartButton })
+    /// <summary>
+    /// Assegna a ogni elemento la sua zona e il suo ordine: disposizione classica, oppure quella del layout avanzato.
+    /// Gli elementi non vengono spostati nell'albero visuale: ci pensa <see cref="BarPanel"/> a disporli.
+    /// </summary>
+    private void ApplyWidgetLayout()
+    {
+        BarLayout layout = _s.EffectiveLayout;
+        int order = 0;
+        foreach (BarZone zone in Enum.GetValues<BarZone>())
+        {
+            foreach (BarWidget widget in layout[zone])
             {
-                b.Padding = new Thickness(0, 7, 0, 7);
-                b.Margin = new Thickness(3, 1, 3, 1);
-                b.HorizontalAlignment = HorizontalAlignment.Stretch;
+                FrameworkElement element = ElementOf(widget);
+                BarPanel.SetZone(element, zone);
+                BarPanel.SetOrder(element, order++);
             }
         }
     }
@@ -161,6 +166,7 @@ public partial class TaskbarWindow : AppBarWindow
     /// <summary>Mostra/nasconde gli elementi opzionali in base alle impostazioni.</summary>
     public void ApplyElements()
     {
+        ApplyWidgetLayout();
         Media.Configure(_s.ShowMediaPlayer, _s.ShowMediaTitle);
         ClockButton.Visibility = Vis(_s.ShowClock);
         Tray.Visibility = Vis(_s.ShowTray);
@@ -734,29 +740,20 @@ public partial class TaskbarWindow : AppBarWindow
 
     // ---- GIF -------------------------------------------------------------------------------------
 
-    private readonly StackPanel _centerGifHost = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
     private string _gifSignature = "";
 
-    /// <summary>Mostra le GIF abilitate nella posizione scelta. Non fa nulla se nulla è cambiato.</summary>
+    /// <summary>Mostra le GIF abilitate (la posizione sulla barra la decide il layout). Non fa nulla se nulla è cambiato.</summary>
     private void BuildGifs()
     {
         var items = _s.Gifs.Where(g => g.Enabled && System.IO.File.Exists(GifService.FullPath(g))).ToList();
         double thickness = Math.Clamp(_s.Theme.BarHeight, 24, 96);
         double size = _s.GifSize > 0 ? _s.GifSize : thickness - 10;
         size = Math.Clamp(size, 12, thickness - 2);
-        string signature = $"{_s.GifPlacement}|{size}|{string.Join("|", items.Select(g => g.File))}";
+        string signature = $"{size}|{string.Join("|", items.Select(g => g.File))}";
         if (signature == _gifSignature) return;
         _gifSignature = signature;
 
-        LeftGifHost.Children.Clear();
-        RightGifHost.Children.Clear();
-        _centerGifHost.Children.Clear();
-        Panel host = _s.GifPlacement switch
-        {
-            GifPlacement.Left => LeftGifHost,
-            GifPlacement.Right => RightGifHost,
-            _ => _centerGifHost
-        };
+        GifHost.Children.Clear();
 
         foreach (GifItem item in items)
         {
@@ -780,7 +777,7 @@ public partial class TaskbarWindow : AppBarWindow
                 OpenMenu(menu, gif);
             };
             gif.Load(GifService.FullPath(item), size);
-            host.Children.Add(gif);
+            GifHost.Children.Add(gif);
         }
     }
 
@@ -825,8 +822,23 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Start_Click(object sender, RoutedEventArgs e) => _app.ToggleStartMenu(this, StartButton);
 
-    /// <summary>Elemento accanto al quale aprire il menu Start (il pulsante, o la barra se il pulsante è nascosto).</summary>
-    public FrameworkElement StartAnchor => StartButton.IsVisible ? StartButton : RightPanel;
+    /// <summary>
+    /// Elemento accanto al quale aprire il menu Start: il pulsante oppure, se è nascosto, l'elemento visibile che gli
+    /// sta più vicino nella stessa zona (in mancanza, l'intera barra).
+    /// </summary>
+    public FrameworkElement StartAnchor
+    {
+        get
+        {
+            if (StartButton.IsVisible) return StartButton;
+            BarZone zone = BarPanel.GetZone(StartButton);
+            int order = BarPanel.GetOrder(StartButton);
+            return WidgetPanel.Children.OfType<FrameworkElement>()
+                .Where(el => el.IsVisible && el.ActualWidth > 0 && el.ActualHeight > 0 && BarPanel.GetZone(el) == zone)
+                .OrderBy(el => Math.Abs(BarPanel.GetOrder(el) - order))
+                .FirstOrDefault() ?? WidgetPanel;
+        }
+    }
 
     /// <summary>In auto-hide: mostra la barra per un momento (es. quando il menu Start si apre da tastiera).</summary>
     public void Peek() => PeekDuringAutoHide(1500);

@@ -11,6 +11,70 @@ public enum BackdropMode { Solid, Transparent, Blur, Acrylic, Glass }
 public enum BorderSides { All, DesktopSide, ScreenSide }
 /// <summary>Dove compaiono le GIF sulla barra.</summary>
 public enum GifPlacement { Left, Center, Right }
+/// <summary>Elementi della barra che il layout avanzato permette di disporre a piacere.</summary>
+public enum BarWidget { Apps, Media, Gifs, SysInfo, Volume, Clock, Tray, QuickSettings, Start }
+/// <summary>Zone della barra: inizio (sinistra/alto), centro, fine (destra/basso).</summary>
+public enum BarZone { Start, Center, End }
+
+/// <summary>Disposizione degli elementi sulla barra: per ogni zona, gli elementi nell'ordine in cui compaiono.</summary>
+public class BarLayout
+{
+    public List<BarWidget> Start { get; set; } = new();
+    public List<BarWidget> Center { get; set; } = new();
+    public List<BarWidget> End { get; set; } = new();
+
+    public List<BarWidget> this[BarZone zone] => zone switch
+    {
+        BarZone.Start => Start,
+        BarZone.Center => Center,
+        _ => End
+    };
+
+    /// <summary>Disposizione classica: app a sinistra, player al centro, sistema a destra; le GIF dove indicato.</summary>
+    public static BarLayout Default(GifPlacement gifs = GifPlacement.Center)
+    {
+        var layout = new BarLayout
+        {
+            Start = { BarWidget.Apps },
+            Center = { BarWidget.Media },
+            End = { BarWidget.SysInfo, BarWidget.Volume, BarWidget.Clock, BarWidget.Tray, BarWidget.QuickSettings, BarWidget.Start }
+        };
+        switch (gifs)
+        {
+            case GifPlacement.Left: layout.Start.Insert(0, BarWidget.Gifs); break;
+            case GifPlacement.Right: layout.End.Insert(0, BarWidget.Gifs); break;
+            default: layout.Center.Add(BarWidget.Gifs); break;
+        }
+        return layout;
+    }
+
+    /// <summary>Stile Windows 11: Start e app al centro, sistema a destra, player a sinistra.</summary>
+    public static BarLayout Centered() => new()
+    {
+        Start = { BarWidget.Media, BarWidget.Gifs },
+        Center = { BarWidget.Start, BarWidget.Apps },
+        End = { BarWidget.SysInfo, BarWidget.Tray, BarWidget.Volume, BarWidget.QuickSettings, BarWidget.Clock }
+    };
+
+    /// <summary>
+    /// Garantisce che ogni elemento compaia una e una sola volta (file modificato a mano, elementi aggiunti da una
+    /// versione più recente): i doppioni spariscono, i mancanti tornano nella loro zona predefinita.
+    /// </summary>
+    public void Normalize()
+    {
+        Start ??= new();
+        Center ??= new();
+        End ??= new();
+        var seen = new HashSet<BarWidget>();
+        foreach (BarZone zone in Enum.GetValues<BarZone>())
+            this[zone].RemoveAll(w => !Enum.IsDefined(w) || !seen.Add(w));
+
+        BarLayout fallback = Default();
+        foreach (BarZone zone in Enum.GetValues<BarZone>())
+            foreach (BarWidget w in fallback[zone])
+                if (seen.Add(w)) this[zone].Add(w);
+    }
+}
 
 /// <summary>Tutti i parametri grafici della barra. Un "tema" è semplicemente un'istanza di questa classe.</summary>
 public class ThemeData : ObservableObject
@@ -126,6 +190,7 @@ public class AppSettings : ObservableObject
     private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
     private double _gifSize;
     private GifPlacement _gifPlacement = GifPlacement.Center;
+    private bool _advancedLayout;
 
     public ThemeData Theme { get => _theme; set => Set(ref _theme, value); }
 
@@ -162,6 +227,14 @@ public class AppSettings : ObservableObject
     /// <summary>Altezza delle GIF in px (0 = automatica, in base all'altezza della barra).</summary>
     public double GifSize { get => _gifSize; set => Set(ref _gifSize, value); }
     public GifPlacement GifPlacement { get => _gifPlacement; set => Set(ref _gifPlacement, value); }
+
+    // Layout avanzato
+    /// <summary>Se attivo, gli elementi della barra seguono <see cref="Layout"/> invece della disposizione classica.</summary>
+    public bool AdvancedLayout { get => _advancedLayout; set => Set(ref _advancedLayout, value); }
+    /// <summary>Disposizione personalizzata. Null finché il layout avanzato non viene attivato la prima volta.</summary>
+    public BarLayout? Layout { get; set; }
+    /// <summary>La disposizione da usare adesso: quella personalizzata, oppure quella classica.</summary>
+    [JsonIgnore] public BarLayout EffectiveLayout => AdvancedLayout && Layout != null ? Layout : BarLayout.Default(GifPlacement);
 
     // Sistema
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }

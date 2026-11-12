@@ -42,6 +42,7 @@ public sealed class SettingsService
                     s.StartFavorites ??= new();
                     s.RecentColors ??= new();
                     s.Gifs ??= new();
+                    s.Layout?.Normalize();
                     return s;
                 }
             }
