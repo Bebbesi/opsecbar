@@ -450,6 +450,33 @@ public partial class App : Application
         }
     }
 
+    // ---- Disinstallazione ----------------------------------------------------------------------
+
+    /// <summary>Il disinstallatore creato dal programma di installazione; null se OpSec Bar non è stato installato così.</summary>
+    public static string? UninstallerPath
+    {
+        get
+        {
+            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "unins000.exe");
+            return System.IO.File.Exists(path) ? path : null;
+        }
+    }
+
+    /// <summary>
+    /// Avvia il disinstallatore. La barra resta aperta finché l'utente non conferma: il disinstallatore la chiude da sé
+    /// (e ripristina la taskbar di Windows) solo dopo il "Sì", così annullando non si perde la barra.
+    /// </summary>
+    public void Uninstall()
+    {
+        if (UninstallerPath is not { } path) return;
+        try
+        {
+            Log.Info("Disinstallazione richiesta");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) { Log.Error("Avvio del disinstallatore", ex); }
+    }
+
     // ---- Uscita e gestione errori --------------------------------------------------------------
 
     public void ExitApp(bool restart = false)

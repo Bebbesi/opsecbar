@@ -920,6 +920,7 @@ public partial class TaskbarWindow : AppBarWindow
         menu.Items.Add(MenuEntry("Windows Start menu", "", ShellHelper.ShowStartMenu));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuEntry("Exit OpSec Bar", "", () => _app.ExitApp()));
+        if (App.UninstallerPath != null) menu.Items.Add(MenuEntry("Uninstall OpSec Bar…", "", _app.Uninstall));
         OpenMenu(menu, anchor);
     }
 

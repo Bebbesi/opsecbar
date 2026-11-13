@@ -1264,6 +1264,13 @@ public partial class SettingsWindow : Window
         FrameworkElement control = action != null && run != null ? Btn(action, run, u.State is UpdateState.Available or UpdateState.Ready) : Gap(0);
         Row(updates, "OpSec Bar " + u.CurrentLabel, status, control);
 
+        if (App.UninstallerPath != null)
+        {
+            var remove = Section("Uninstall");
+            Row(remove, "Uninstall OpSec Bar", "Removes the app and brings the Windows taskbar back. You can choose to keep or delete your settings.",
+                Btn("Uninstall…", _app.Uninstall));
+        }
+
         var about = Section("About");
         Row(about, "Version", null, new TextBlock
         {

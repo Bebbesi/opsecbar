@@ -58,3 +58,17 @@ begin
   Sleep(800);
   Result := '';
 end;
+
+// The uninstaller removes the program; the settings, themes, GIFs and log live in %APPDATA%\OpSecBar and are kept unless asked.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{userappdata}\OpSecBar');
+    if (not UninstallSilent) and DirExists(DataDir) then
+      if MsgBox('Also delete your OpSec Bar settings, themes and GIFs?' + #13#10 + #13#10 + DataDir, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+        DelTree(DataDir, True, True, True);
+  end;
+end;
