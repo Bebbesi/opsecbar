@@ -303,6 +303,7 @@ public partial class App : Application
                     ApplyWinKey();
                     break;
                 case nameof(AppSettings.PinnedApps):
+                case nameof(AppSettings.TaskOrder):
                 case nameof(AppSettings.ShowPinnedApps):
                 case nameof(AppSettings.ShowRunningApps):
                 case nameof(AppSettings.GroupWindows):

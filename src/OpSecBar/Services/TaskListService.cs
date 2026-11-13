@@ -34,6 +34,9 @@ public sealed class AppItem : ObservableObject
     public bool IsRunning { get => _isRunning; private set => Set(ref _isRunning, value); }
     public bool IsActive { get => _isActive; private set => Set(ref _isActive, value); }
     public bool IsFlashing { get => _isFlashing; private set => Set(ref _isFlashing, value); }
+    /// <summary>True mentre l'icona viene trascinata per cambiarne la posizione.</summary>
+    public bool IsDragging { get => _isDragging; set => Set(ref _isDragging, value); }
+    private bool _isDragging;
 
     public AppItem(string key) => Key = key;
 
@@ -203,6 +206,16 @@ public sealed class TaskListService
             target.Windows.Add(w);
         }
 
+        // Le app fissate restano nell'ordine delle fissate; le altre seguono l'ordine scelto trascinandole (le nuove in coda).
+        if (s.TaskOrder.Count > 0)
+        {
+            var order = new Dictionary<string, int>();
+            foreach (string key in s.TaskOrder) order.TryAdd(key, order.Count);
+            var pinned = desired.Where(d => d.Pin != null);
+            var others = desired.Where(d => d.Pin == null).OrderBy(d => order.TryGetValue(d.Key, out int i) ? i : int.MaxValue);
+            desired = pinned.Concat(others).ToList();
+        }
+
         // Sincronizza la collezione osservabile con il minimo di operazioni (così la UI non lampeggia).
         for (int i = Items.Count - 1; i >= 0; i--)
             if (!byKey.ContainsKey(Items[i].Key)) Items.RemoveAt(i);
@@ -267,6 +280,38 @@ public sealed class TaskListService
     {
         if (_settings.Settings.PinnedApps.RemoveAll(p => p.Key == app.Key) > 0)
             _settings.Notify(nameof(AppSettings.PinnedApps));
+    }
+
+    // ---- Riordino col trascinamento --------------------------------------------------------------
+
+    /// <summary>Sposta l'icona nella posizione di un'altra, ma solo dentro il proprio gruppo (fissate / non fissate).</summary>
+    public void MoveItem(AppItem item, AppItem target)
+    {
+        if (item.IsPinned != target.IsPinned) return;
+        int from = Items.IndexOf(item), to = Items.IndexOf(target);
+        if (from < 0 || to < 0 || from == to) return;
+        Items.Move(from, to);
+    }
+
+    /// <summary>Salva l'ordine attuale delle icone: fissate nell'elenco delle fissate, le altre in TaskOrder.</summary>
+    public void CommitOrder()
+    {
+        AppSettings s = _settings.Settings;
+
+        var pins = Items.Where(i => i.Pin != null).Select(i => i.Pin!).ToList();
+        if (pins.Count > 1 && pins.Count == s.PinnedApps.Count && !pins.SequenceEqual(s.PinnedApps))
+        {
+            s.PinnedApps.Clear();
+            s.PinnedApps.AddRange(pins);
+            _settings.Notify(nameof(AppSettings.PinnedApps));
+        }
+
+        var order = Items.Where(i => i.Pin == null).Select(i => i.Key).ToList();
+        if (!order.SequenceEqual(s.TaskOrder))
+        {
+            s.TaskOrder = order;
+            _settings.Notify(nameof(AppSettings.TaskOrder));
+        }
     }
 
     // ---- Termina attività --------------------------------------------------------------------------

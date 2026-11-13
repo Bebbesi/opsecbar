@@ -842,7 +842,8 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Bar_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = DroppedGifs(e).Any() ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetDataPresent(TaskDragFormat) ? DragDropEffects.Move
+            : DroppedGifs(e).Any() ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
@@ -1029,8 +1030,63 @@ public partial class TaskbarWindow : AppBarWindow
         return e.AllowedEffects.HasFlag(DragDropEffects.Link) ? DragDropEffects.Link : DragDropEffects.None;
     }
 
+    // ---- Riordino delle icone trascinandole ---------------------------------------------------------
+
+    private const string TaskDragFormat = "OpSecBar.TaskItem";
+    private Point _pressPoint;
+    private AppItem? _reorderItem;
+
+    private void Task_Move(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _pressedItem == null || _reorderItem != null) return;
+        if (sender is not FrameworkElement element || !ReferenceEquals(ItemOf(sender), _pressedItem)) return;
+        Point p = e.GetPosition(this);
+        if (Math.Abs(p.X - _pressPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(p.Y - _pressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        AppItem item = _pressedItem;
+        // Il click è diventato un trascinamento: niente azione al rilascio.
+        _pressedItem = null;
+        AnimatePress(sender, false);
+        HidePreview();
+        _reorderItem = item;
+        item.IsDragging = true;
+        try
+        {
+            DragDrop.DoDragDrop(element, new DataObject(TaskDragFormat, item.Key), DragDropEffects.Move);
+        }
+        catch (Exception ex) { Log.Error("Riordino icone", ex); }
+        finally
+        {
+            item.IsDragging = false;
+            _reorderItem = null;
+            _app.TaskList.CommitOrder();
+        }
+    }
+
+    /// <summary>Durante il riordino: l'icona trascinata prende il posto di quella sorvolata, appena si supera la sua metà.</summary>
+    private void Task_ReorderOver(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        e.Effects = DragDropEffects.Move;
+        if (_reorderItem is not { } dragged || sender is not FrameworkElement element || ItemOf(sender) is not { } target ||
+            ReferenceEquals(dragged, target)) return;
+
+        Point p = e.GetPosition(element);
+        double fraction = IsHorizontal ? p.X / Math.Max(element.ActualWidth, 1) : p.Y / Math.Max(element.ActualHeight, 1);
+        var items = _app.TaskList.Items;
+        int from = items.IndexOf(dragged), to = items.IndexOf(target);
+        if (from < 0 || to < 0) return;
+        if ((from < to && fraction > 0.5) || (from > to && fraction < 0.5)) _app.TaskList.MoveItem(dragged, target);
+    }
+
     private void Task_DragOver(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(TaskDragFormat))
+        {
+            Task_ReorderOver(sender, e);
+            return;
+        }
         if (sender is not FrameworkElement element || ItemOf(sender) is not { } item) return;
         e.Handled = true;
         e.Effects = IconDropEffect(e, item);
@@ -1053,7 +1109,7 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Task_DragLeave(object sender, DragEventArgs e)
     {
-        if (!ReferenceEquals(sender, _dragElement)) return;
+        if (_reorderItem != null || !ReferenceEquals(sender, _dragElement)) return;
         // L'evento arriva anche passando da un elemento interno dell'icona all'altro (subito seguito da un DragEnter):
         // l'uscita vale solo se nel frattempo il trascinamento non è rientrato sull'icona.
         int moves = _dragMoves;
@@ -1067,6 +1123,12 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Task_Drop(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(TaskDragFormat))
+        {
+            e.Handled = true;
+            e.Effects = DragDropEffects.Move;
+            return;
+        }
         AppItem? item = ItemOf(sender);
         EndIconDrag();
         HidePreview();
@@ -1111,6 +1173,7 @@ public partial class TaskbarWindow : AppBarWindow
         HidePreview();
         // Lo stato va letto ORA: al rilascio la nostra barra sarà la finestra attiva.
         _pressedItem = ItemOf(sender);
+        _pressPoint = e.GetPosition(this);
         _pressedWasActive = _pressedItem?.IsActive == true;
         if (TaskListService.DebugEnabled) Log.Info($"[down] item={_pressedItem?.Key} attiva={_pressedWasActive}");
         AnimatePress(sender, true);

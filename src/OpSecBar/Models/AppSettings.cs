@@ -278,6 +278,8 @@ public class AppSettings : ObservableObject
 
     // Elenchi (salvati esplicitamente quando cambiano)
     public List<PinnedApp> PinnedApps { get; set; } = new();
+    /// <summary>Ordine scelto trascinando le icone delle app aperte ma non fissate (chiavi di AppItem).</summary>
+    public List<string> TaskOrder { get; set; } = new();
     public List<PinnedApp> StartFavorites { get; set; } = new();
     /// <summary>Icone del tray sempre visibili. Null = predefinite di Windows (rete, audio, batteria...).</summary>
     public string[]? PinnedTrayIcons { get; set; }

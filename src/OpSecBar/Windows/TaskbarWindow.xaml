@@ -12,7 +12,7 @@
         <DataTemplate x:Key="TaskItemTemplate">
             <Grid x:Name="Root" Margin="{DynamicResource BarIconSpacing}" Background="Transparent" Opacity="0"
                   ToolTip="{Binding Title}" ToolTipService.InitialShowDelay="450"
-                  PreviewMouseLeftButtonDown="Task_Down" MouseLeftButtonUp="Task_Up" MouseEnter="Task_Enter" MouseLeave="Task_Leave"
+                  PreviewMouseLeftButtonDown="Task_Down" PreviewMouseMove="Task_Move" MouseLeftButtonUp="Task_Up" MouseEnter="Task_Enter" MouseLeave="Task_Leave"
                   MouseRightButtonUp="Task_RightUp" MouseDown="Task_MouseDown"
                   DragEnter="Task_DragOver" DragOver="Task_DragOver" DragLeave="Task_DragLeave" Drop="Task_Drop">
                 <Border x:Name="Hover" CornerRadius="7" Background="Transparent" />
@@ -59,6 +59,11 @@
                 <Trigger SourceName="Root" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Hover" Property="Background" Value="{DynamicResource PressedBrush}" />
                 </Trigger>
+                <!-- Icona in corso di spostamento: slot evidenziato e icona attenuata -->
+                <DataTrigger Binding="{Binding IsDragging}" Value="True">
+                    <Setter TargetName="Hover" Property="Background" Value="{DynamicResource PressedBrush}" />
+                    <Setter TargetName="Icon" Property="Opacity" Value="0.55" />
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
     </appbar:AppBarWindow.Resources>
