@@ -93,6 +93,8 @@ Icons only, no labels: pinned apps plus running apps. Multiple windows of the sa
 | Click | Open / bring to front / minimize |
 | Middle click | New window |
 | Right click | Menu: New window, Run as administrator, Pin to taskbar, Minimize / Maximize / Close, **End task** (kills the process) |
+| Drag a file over an icon and wait | The app's window comes to the front, so you can drop inside it (with several windows, pick one from the previews) |
+| Drop files on an icon | Opens them with that app, running or not, when Windows lists it under "Open with" for those file types |
 
 ### Center: media player
 Optional, based on the Windows media controls: cover art, title, artist, previous / play-pause / next.

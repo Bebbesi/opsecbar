@@ -13,7 +13,8 @@
             <Grid x:Name="Root" Margin="{DynamicResource BarIconSpacing}" Background="Transparent" Opacity="0"
                   ToolTip="{Binding Title}" ToolTipService.InitialShowDelay="450"
                   PreviewMouseLeftButtonDown="Task_Down" MouseLeftButtonUp="Task_Up" MouseEnter="Task_Enter" MouseLeave="Task_Leave"
-                  MouseRightButtonUp="Task_RightUp" MouseDown="Task_MouseDown">
+                  MouseRightButtonUp="Task_RightUp" MouseDown="Task_MouseDown"
+                  DragEnter="Task_DragOver" DragOver="Task_DragOver" DragLeave="Task_DragLeave" Drop="Task_Drop">
                 <Border x:Name="Hover" CornerRadius="7" Background="Transparent" />
                 <Image x:Name="Icon" Source="{Binding Icon}" Width="{DynamicResource BarIconSize}" Height="{DynamicResource BarIconSize}"
                        Margin="7,4,7,6" RenderOptions.BitmapScalingMode="HighQuality" RenderTransformOrigin="0.5,0.5"
@@ -62,7 +63,9 @@
         </DataTemplate>
     </appbar:AppBarWindow.Resources>
 
-    <Grid x:Name="RootGrid">
+    <!-- Trascinamenti accettati su tutta la finestra (anche sul margine di una barra flottante, così in auto-hide
+         la barra ricompare): file .gif sulla barra, qualsiasi file sull'icona di un'app. -->
+    <Grid x:Name="RootGrid" AllowDrop="True" Drop="Bar_Drop" DragOver="Bar_DragOver">
         <!-- Ombra esterna (solo barra flottante senza blur) -->
         <Grid x:Name="ShadowLayer" IsHitTestVisible="False" Visibility="Collapsed">
             <Border x:Name="ShadowShape" Background="#000000">
@@ -72,8 +75,7 @@
             </Border>
         </Grid>
 
-        <!-- La barra accetta file .gif trascinati da Esplora file: vengono aggiunti alle GIF della barra -->
-        <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp" AllowDrop="True" Drop="Bar_Drop" DragOver="Bar_DragOver">
+        <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp">
             <!-- Gli elementi della barra. Zona (sinistra / centro / destra) e ordine di ciascuno sono assegnati da codice
                  (ApplyWidgetLayout): disposizione classica oppure quella scelta nel layout avanzato. -->
             <c:BarPanel x:Name="WidgetPanel" Margin="6,0">
@@ -140,7 +142,7 @@
 
         <Popup x:Name="VolumeFlyout" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
                PlacementTarget="{Binding ElementName=VolumeButton}" Opened="VolumeFlyout_Opened" Closed="VolumeFlyout_Closed">
-            <Border Style="{StaticResource FlyoutBorder}" Padding="10,8" TextElement.Foreground="{DynamicResource PanelFgBrush}"
+            <Border Style="{StaticResource FlyoutBorder}" Padding="10,8" AllowDrop="False" TextElement.Foreground="{DynamicResource PanelFgBrush}"
                     TextElement.FontFamily="{DynamicResource BarFont}">
                 <StackPanel Width="250">
                     <DockPanel>

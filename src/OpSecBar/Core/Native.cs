@@ -12,6 +12,30 @@ internal static class Native
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("kernel32.dll")] private static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetApplicationUserModelId(IntPtr process, ref uint length, System.Text.StringBuilder id);
+
+    /// <summary>
+    /// AUMID ("famiglia!app") del processo proprietario della finestra, se è un'app in pacchetto (MSIX); altrimenti null.
+    /// Le app Win32 in pacchetto non lo espongono sulla finestra: va chiesto al processo.
+    /// </summary>
+    public static string? PackagedAppId(IntPtr hWnd)
+    {
+        GetWindowThreadProcessId(hWnd, out uint pid);
+        if (pid == 0) return null;
+        IntPtr process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            uint length = 512;
+            var id = new System.Text.StringBuilder((int)length);
+            return GetApplicationUserModelId(process, ref length, id) == 0 && id.Length > 0 ? id.ToString() : null;
+        }
+        finally { CloseHandle(process); }
+    }
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLong(IntPtr hWnd, int index);
     public const int GWL_EXSTYLE = -20, WS_EX_TOPMOST = 0x8;
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
@@ -43,7 +67,7 @@ internal static class Native
     /// Porta una nostra finestra in primo piano anche quando l'input non è partito dalla nostra app
     /// (es. menu Start aperto dal tasto Windows): ci si aggancia temporaneamente al thread in primo piano.
     /// </summary>
-    public static void ForceForeground(IntPtr hWnd)
+    public static void ForceForeground(IntPtr hWnd, bool allowKeyTap = true)
     {
         IntPtr foreground = GetForegroundWindow();
         if (foreground == hWnd) return;
@@ -58,7 +82,8 @@ internal static class Native
         }
         else SetForegroundWindow(hWnd);
 
-        if (GetForegroundWindow() == hWnd) return;
+        // Durante un trascinamento il tasto Alt cambierebbe l'effetto del rilascio: lì non lo si tocca.
+        if (!allowKeyTap || GetForegroundWindow() == hWnd) return;
         // Ultima risorsa: un tocco del tasto Alt sblocca il cambio di primo piano imposto da Windows.
         keybd_event(0x12, 0, 0, UIntPtr.Zero);
         keybd_event(0x12, 0, 2, UIntPtr.Zero);
@@ -145,6 +170,47 @@ internal static class Native
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     public static extern int SHCreateItemFromParsingName(string path, IntPtr pbc, ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? ppv);
+
+    // ---- "Apri con": le app registrate per un tipo di file (file trascinati su un'icona) -------
+    [ComImport, Guid("F04061AC-1659-4a3f-A954-775AA57FC083"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IAssocHandler
+    {
+        /// <summary>Percorso dell'eseguibile (per le app UWP solo un nome).</summary>
+        [PreserveSig] int GetName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+        [PreserveSig] int GetUIName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+        [PreserveSig] int GetIconLocation([MarshalAs(UnmanagedType.LPWStr)] out string path, out int index);
+        [PreserveSig] int IsRecommended();
+        [PreserveSig] int MakeDefault([MarshalAs(UnmanagedType.LPWStr)] string description);
+        /// <param name="dataObject">IDataObject con i file da aprire.</param>
+        [PreserveSig] int Invoke(IntPtr dataObject);
+        [PreserveSig] int CreateInvoker(IntPtr dataObject, out IntPtr invoker);
+    }
+
+    [ComImport, Guid("973810ae-9599-4b88-9e4d-6ee98c9552da"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IEnumAssocHandlers
+    {
+        [PreserveSig] int Next(int count, [MarshalAs(UnmanagedType.Interface)] out IAssocHandler? handler, out int fetched);
+    }
+
+    /// <param name="filter">0 = ASSOC_FILTER_NONE: tutte le app di "Apri con", non solo quelle consigliate.</param>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SHAssocEnumHandlers(string extension, int filter, out IEnumAssocHandlers? handlers);
+
+    /// <summary>Solo il primo metodo: è l'unico usato (per ottenere l'IDataObject dei file).</summary>
+    [ComImport, Guid("b63ea76d-1f85-456f-a19c-48159efa858b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IShellItemArray
+    {
+        [PreserveSig] int BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid riid, out IntPtr result);
+    }
+
+    public static readonly Guid BHID_DataObject = new("B8C0BD9F-ED24-455c-83E6-D5390C4FE8C4");
+    public static readonly Guid IID_IDataObject = new("0000010e-0000-0000-C000-000000000046");
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SHParseDisplayName(string name, IntPtr bindContext, out IntPtr pidl, uint attributesIn, out uint attributesOut);
+
+    [DllImport("shell32.dll")]
+    public static extern int SHCreateShellItemArrayFromIDLists(uint count, IntPtr[] pidls, out IntPtr itemArray);
 
     // ---- Informazioni di sistema -------------------------------------------------------------
     [StructLayout(LayoutKind.Sequential)]

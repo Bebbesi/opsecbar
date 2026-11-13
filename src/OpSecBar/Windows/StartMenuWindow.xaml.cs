@@ -57,7 +57,17 @@ public partial class StartMenuWindow : Window
         RefreshFavorites();
         ApplyFilter();
 
+        // L'animazione dell'apertura precedente tiene ancora Opacity a 1: va tolta, altrimenti "Opacity = 0" non ha effetto
+        // e il menu compare pieno per un fotogramma prima della dissolvenza (lo sfarfallio).
+        BeginAnimation(OpacityProperty, null);
+        StopSlide();
+        _hasRest = false;
         Opacity = 0;
+
+        // Una finestra trasparente, quando torna visibile, mostra per un istante l'ultimo fotogramma di prima (menu pieno,
+        // vecchia posizione). La si tiene "occultata" (DWM cloak) finché WPF non ha disegnato il nuovo fotogramma trasparente.
+        if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(this).EnsureHandle();
+        Cloak(true);
         Show();
         PositionNearAnchor();
         Activate();
@@ -66,21 +76,60 @@ public partial class StartMenuWindow : Window
         Keyboard.Focus(SearchBox);
         bar.NotifyAutoHideStateChanged();
 
-        // Dopo il primo layout (e l'eventuale cambio DPI del monitor) si riposiziona e si mostra con una breve animazione.
+        // Dopo il primo layout (e l'eventuale cambio DPI del monitor) si riposiziona; un paio di fotogrammi dopo, quando
+        // il contenuto trasparente è davvero sullo schermo, si scopre la finestra e parte la breve animazione.
+        int opening = ++_openSeq;
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
+            if (opening != _openSeq) return;
             PositionNearAnchor();
-            ApplyBackdrop();
-            AnimateIn();
+            AfterFrames(2, () =>
+            {
+                if (opening != _openSeq || !IsVisible) return;
+                // Punto di partenza dello scorrimento: la lastra sfocata nasce già lì, sotto il menu.
+                AppBarEdge edge = _bar?.AppBarEdge ?? AppBarEdge.Top;
+                MoveSlide((int)Math.Round((edge == AppBarEdge.Bottom ? 10 : -10) * Scale));
+                ApplyBackdrop();
+                Cloak(false);
+                AnimateIn();
+            });
         });
 
         if (!_loaded) LoadApps();
+    }
+
+    private int _openSeq;
+
+    /// <summary>Nasconde (o scopre) la finestra a schermo senza toglierle visibilità, attivazione o rendering.</summary>
+    private void Cloak(bool on)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        try
+        {
+            int value = on ? 1 : 0;
+            Native.DwmSetWindowAttribute(_hwnd, 13 /* DWMWA_CLOAK */, ref value, sizeof(int));
+        }
+        catch { /* senza DWM resta comunque la dissolvenza da Opacity 0 */ }
+    }
+
+    private static void AfterFrames(int frames, Action action)
+    {
+        EventHandler? tick = null;
+        tick = (_, _) =>
+        {
+            if (--frames > 0) return;
+            CompositionTarget.Rendering -= tick;
+            action();
+        };
+        CompositionTarget.Rendering += tick;
     }
 
     public void HideMenu()
     {
         if (!IsVisible) return;
         _hiddenAt = DateTime.Now;
+        _openSeq++; // annulla un'apertura ancora in corso
+        StopSlide();
         _backdrop?.Hide();
         Hide();
         _bar?.NotifyAutoHideStateChanged();
@@ -106,14 +155,48 @@ public partial class StartMenuWindow : Window
 
     private void Window_Deactivated(object? sender, EventArgs e) => HideMenu();
 
+    private double Scale => _bar?.DpiScale > 0 ? _bar!.DpiScale : 1;
+
+    // Lo scorrimento sposta la finestra (e la lastra sfocata) di pixel interi, invece di traslare il contenuto: con una
+    // traslazione WPF il pannello passa per posizioni frazionarie, testo e bordo da 1 px si sfumano e poi "scattano"
+    // nitidi a fine animazione (uno sfarfallio). Spostando la finestra non si ridisegna nulla: resta sempre nitida.
+    private (int X, int Y) _rest;   // posizione finale della finestra, in pixel fisici
+    private bool _hasRest;
+    private int _slideOffset;       // scostamento verticale attuale rispetto a _rest
+    private EventHandler? _slideTick;
+
     private void AnimateIn()
     {
-        AppBarEdge edge = _bar?.AppBarEdge ?? AppBarEdge.Top;
-        double from = edge == AppBarEdge.Bottom ? 10 : -10;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(140)));
-        Slide.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+
+        int from = _slideOffset;
+        if (from == 0) return;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        _slideTick = (_, _) =>
+        {
+            double t = Math.Min(1, clock.Elapsed.TotalMilliseconds / 200);
+            double left = Math.Pow(1 - t, 3); // decelerazione cubica
+            MoveSlide((int)Math.Round(from * left));
+            if (t >= 1) StopSlide();
+        };
+        CompositionTarget.Rendering += _slideTick;
+    }
+
+    private void MoveSlide(int offset)
+    {
+        if (!_hasRest || offset == _slideOffset) return;
+        _slideOffset = offset;
+        Native.SetWindowPos(_hwnd, IntPtr.Zero, _rest.X, _rest.Y + offset, 0, 0,
+            Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+        int pad = (int)Math.Round(ShadowMargin * Scale);
+        _backdrop?.MoveTo(_rest.X + pad, _rest.Y + offset + pad);
+    }
+
+    private void StopSlide()
+    {
+        if (_slideTick != null) CompositionTarget.Rendering -= _slideTick;
+        _slideTick = null;
+        _slideOffset = 0;
     }
 
     /// <summary>Posiziona il menu accanto al pulsante Start, in pixel fisici (corretto con qualsiasi DPI e monitor).</summary>
@@ -170,7 +253,9 @@ public partial class StartMenuWindow : Window
             x = Math.Clamp(x, screen.Left - pad + gap, Math.Max(screen.Left - pad + gap, screen.Right - w + pad - gap));
             y = Math.Clamp(y, screen.Top - pad + gap, Math.Max(screen.Top - pad + gap, screen.Bottom - h + pad - gap));
 
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            _rest = (x, y);
+            _hasRest = true;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y + _slideOffset, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
         }
         catch (Exception ex) { Log.Error("Posizionamento menu Start", ex); }
     }

@@ -41,6 +41,12 @@ public partial class TaskbarWindow : AppBarWindow
     private AppItem? _previewItem, _hoverItem;
     private FrameworkElement? _hoverElement;
 
+    // Trascinamento sopra le icone delle app: l'icona su cui ci si sofferma porta in primo piano la sua finestra
+    private readonly DispatcherTimer _dragHoverTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
+    private AppItem? _dragItem;
+    private FrameworkElement? _dragElement;
+    private int _dragMoves;
+
     public TaskbarWindow(App app, AppBarScreen screen)
         : base(app.Shell.AppBarManager, app.Shell.ExplorerHelper, app.Shell.FullScreenHelper, screen,
             ToEdge(app.Settings.Position),
@@ -87,8 +93,17 @@ public partial class TaskbarWindow : AppBarWindow
             _previewHideTimer.Stop();
             HidePreview();
         };
+        _dragHoverTimer.Tick += (_, _) =>
+        {
+            _dragHoverTimer.Stop();
+            if (_dragItem is not { } item || _dragElement is not { } element) return;
+            // Una sola finestra: viene in primo piano, così ci si può rilasciare dentro. Più finestre: si sceglie dall'anteprima.
+            if (item.Windows.Count == 1) TaskListService.ActivateDuringDrag(item.Windows[0]);
+            else if (item.Windows.Count > 1) ShowPreview(item, element);
+        };
         Closed += (_, _) =>
         {
+            EndIconDrag();
             HidePreview();
             _clock.Stop();
             _app.SysInfo.Updated -= UpdateSysInfo;
@@ -968,6 +983,10 @@ public partial class TaskbarWindow : AppBarWindow
             var preview = new TaskPreviewWindow(item.Windows.ToList(), anchor, Handle, PopupPlacement);
             preview.MouseEnter += (_, _) => _previewHideTimer.Stop();
             preview.MouseLeave += (_, _) => _previewHideTimer.Start();
+            // Durante un trascinamento il mouse non genera eventi: valgono quelli del trascinamento.
+            preview.DragEnter += (_, _) => _previewHideTimer.Stop();
+            preview.DragOver += (_, _) => _previewHideTimer.Stop();
+            preview.DragLeave += (_, _) => _previewHideTimer.Start();
             preview.Dismissed += HidePreview;
             _preview = preview;
             _previewItem = item;
@@ -992,6 +1011,99 @@ public partial class TaskbarWindow : AppBarWindow
         preview.Dismissed -= HidePreview;
         try { preview.Close(); } catch (Exception ex) { Log.Warn("Chiusura anteprima: " + ex.Message); }
         OnPopupStateChanged(false);
+    }
+
+    // ---- File trascinati sulle icone ---------------------------------------------------------------
+    // Come sulla taskbar di Windows: soffermandosi su un'icona mentre si trascina, la finestra dell'app viene in primo
+    // piano e ci si può rilasciare dentro. In più, rilasciando i file direttamente sull'icona l'app li apre
+    // (anche se non è in esecuzione).
+
+    /// <summary>Effetto del rilascio sull'icona. Mai "sposta": l'origine cancellerebbe i file dopo averli "spostati".</summary>
+    private DragDropEffects IconDropEffect(DragEventArgs e, AppItem item)
+    {
+        // Se l'app non può aprire questi file il cursore lo dice: soffermandosi, la sua finestra viene comunque in primo
+        // piano e ci si rilascia dentro (così, ad esempio, un'immagine finisce in una chat).
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files ||
+            !_app.TaskList.CanOpenFiles(item, files)) return DragDropEffects.None;
+        if (e.AllowedEffects.HasFlag(DragDropEffects.Copy)) return DragDropEffects.Copy;
+        return e.AllowedEffects.HasFlag(DragDropEffects.Link) ? DragDropEffects.Link : DragDropEffects.None;
+    }
+
+    private void Task_DragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement element || ItemOf(sender) is not { } item) return;
+        e.Handled = true;
+        e.Effects = IconDropEffect(e, item);
+        _dragMoves++; // annulla un'eventuale uscita in sospeso (vedi Task_DragLeave)
+        if (ReferenceEquals(element, _dragElement)) return;
+
+        EndIconDrag();
+        _dragItem = item;
+        _dragElement = element;
+        SetDragHighlight(element, true);
+        _previewShowTimer.Stop();
+        _previewHideTimer.Stop();
+        if (_preview != null && !ReferenceEquals(_previewItem, item))
+        {
+            if (item.Windows.Count > 1) ShowPreview(item, element); // anteprima già aperta: si passa subito all'altra app
+            else HidePreview();
+        }
+        if (item.Windows.Count > 0 && !ReferenceEquals(_previewItem, item)) _dragHoverTimer.Start();
+    }
+
+    private void Task_DragLeave(object sender, DragEventArgs e)
+    {
+        if (!ReferenceEquals(sender, _dragElement)) return;
+        // L'evento arriva anche passando da un elemento interno dell'icona all'altro (subito seguito da un DragEnter):
+        // l'uscita vale solo se nel frattempo il trascinamento non è rientrato sull'icona.
+        int moves = _dragMoves;
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (moves != _dragMoves || !ReferenceEquals(sender, _dragElement)) return;
+            EndIconDrag();
+            if (_preview != null) _previewHideTimer.Start();
+        });
+    }
+
+    private void Task_Drop(object sender, DragEventArgs e)
+    {
+        AppItem? item = ItemOf(sender);
+        EndIconDrag();
+        HidePreview();
+        if (item == null) return;
+        e.Handled = true;
+        e.Effects = IconDropEffect(e, item);
+        if (e.Effects == DragDropEffects.None || e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files) return;
+
+        // L'origine del trascinamento resta in attesa finché il rilascio non ritorna: l'app si avvia subito dopo.
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            try
+            {
+                // Come per un click sull'icona: la barra diventa la finestra attiva, così ciò che avvia può venire in primo piano.
+                Native.ForceForeground(Handle, allowKeyTap: false);
+                // Un'app a istanza singola riceve i file nella finestra che ha già: la si porta davanti.
+                if (item.Windows.Count == 1) TaskListService.ActivateDuringDrag(item.Windows[0]);
+                _app.TaskList.OpenFiles(item, files);
+            }
+            catch (Exception ex) { Log.Error("Apertura dei file trascinati", ex); }
+        });
+    }
+
+    private void EndIconDrag()
+    {
+        _dragHoverTimer.Stop();
+        if (_dragElement != null) SetDragHighlight(_dragElement, false);
+        _dragItem = null;
+        _dragElement = null;
+    }
+
+    /// <summary>Durante un trascinamento il mouse non "passa sopra" gli elementi: l'evidenziazione va accesa a mano.</summary>
+    private static void SetDragHighlight(FrameworkElement element, bool on)
+    {
+        if (element is not Panel panel || panel.Children.OfType<Border>().FirstOrDefault() is not { } hover) return;
+        if (on) hover.SetResourceReference(Border.BackgroundProperty, "PressedBrush");
+        else hover.ClearValue(Border.BackgroundProperty);
     }
 
     private void Task_Down(object sender, MouseButtonEventArgs e)

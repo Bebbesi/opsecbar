@@ -63,6 +63,14 @@ public sealed class BackdropWindow : IDisposable
         _visible = true;
     }
 
+    /// <summary>Sposta la lastra senza cambiarne forma né z-order, per seguire una finestra che scorre.</summary>
+    public void MoveTo(int x, int y)
+    {
+        if (_hwnd == IntPtr.Zero || !_visible) return;
+        Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+        _lastShape = (x, y, _lastShape.W, _lastShape.H, _lastShape.R);
+    }
+
     /// <summary>Riporta la lastra subito sotto la barra dopo un cambio di z-order.</summary>
     public void Restack(IntPtr above)
     {

@@ -171,6 +171,206 @@ public sealed class AppCatalogService
         return false;
     }
 
+    // ---- Apertura di file con un'app (file trascinati sulla sua icona) --------------------------
+    // Stesso meccanismo di "Apri con" in Esplora file: l'app riceve i file solo se Windows la elenca per quel tipo di file
+    // (vale anche per le app in pacchetto, es. Claude). Passare i file sulla riga di comando a un eseguibile qualsiasi
+    // spesso non fa nulla, e il cursore "copia" prometterebbe un'apertura che non avviene.
+
+    private static bool IsExplorer(string? exe, string? appId) =>
+        appId == "Microsoft.Windows.Explorer" ||
+        string.Equals(System.IO.Path.GetFileName(exe), "explorer.exe", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly Dictionary<string, (DateTime At, List<(string Name, string UiName)> Handlers)> HandlerCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static (string Key, bool Result) _lastQuery;
+
+    /// <summary>
+    /// True se l'app può aprire tutti i file trascinati. Chiamata a ogni movimento del trascinamento: il risultato
+    /// resta in memoria per lo stesso gruppo di file e la stessa app.
+    /// </summary>
+    public static bool CanOpenFiles(string name, string? exe, string? appId, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return false;
+        if (IsExplorer(exe, appId)) return true;
+        string key = string.Join("|", paths.Count, paths[0], paths[^1], name, exe, appId);
+        if (_lastQuery.Key == key) return _lastQuery.Result;
+
+        bool result = false;
+        if (Extensions(paths) is { } extensions)
+            result = extensions.All(ext => HandlersFor(ext).Any(h => HandlerMatches(h.Name, h.UiName, name, exe, appId)));
+        _lastQuery = (key, result);
+        return result;
+    }
+
+    /// <summary>Estensioni distinte dei file; null se c'è una cartella o un file senza estensione (nessuna app li "apre").</summary>
+    private static List<string>? Extensions(IReadOnlyList<string> paths)
+    {
+        var list = new List<string>();
+        foreach (string path in paths)
+        {
+            string ext = System.IO.Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext) || System.IO.Directory.Exists(path)) return null;
+            if (!list.Contains(ext, StringComparer.OrdinalIgnoreCase)) list.Add(ext);
+        }
+        return list;
+    }
+
+    private static List<(string Name, string UiName)> HandlersFor(string ext)
+    {
+        lock (HandlerCache)
+            if (HandlerCache.TryGetValue(ext, out var cached) && DateTime.UtcNow - cached.At < TimeSpan.FromSeconds(30))
+                return cached.Handlers;
+
+        var list = new List<(string, string)>();
+        ForEachHandler(ext, (_, handlerName, uiName) =>
+        {
+            list.Add((handlerName, uiName));
+            return false;
+        });
+        lock (HandlerCache) HandlerCache[ext] = (DateTime.UtcNow, list);
+        return list;
+    }
+
+    /// <summary>Visita le app di "Apri con" per l'estensione finché <paramref name="visit"/> non restituisce true.</summary>
+    private static void ForEachHandler(string ext, Func<Native.IAssocHandler, string, string, bool> visit)
+    {
+        Native.IEnumAssocHandlers? handlers = null;
+        try
+        {
+            if (Native.SHAssocEnumHandlers(ext, 0, out handlers) != 0 || handlers == null) return;
+            while (handlers.Next(1, out Native.IAssocHandler? handler, out int fetched) == 0 && fetched == 1 && handler != null)
+            {
+                try
+                {
+                    handler.GetName(out string handlerName);
+                    handler.GetUIName(out string uiName);
+                    if (visit(handler, handlerName ?? "", uiName ?? "")) return;
+                }
+                finally { System.Runtime.InteropServices.Marshal.ReleaseComObject(handler); }
+            }
+        }
+        catch (Exception ex) { Log.Warn($"Elenco \"Apri con\" per {ext}: {ex.Message}"); }
+        finally { if (handlers != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(handlers); }
+    }
+
+    /// <summary>True se la voce di "Apri con" è l'app indicata (stesso eseguibile, stesso pacchetto o, per le UWP, stesso nome).</summary>
+    private static bool HandlerMatches(string handlerName, string uiName, string name, string? exe, string? appId)
+    {
+        if (!handlerName.Contains('\\'))
+            return !string.IsNullOrEmpty(name) && string.Equals(uiName, name, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(exe) && string.Equals(handlerName, exe, StringComparison.OrdinalIgnoreCase)) return true;
+
+        // App in pacchetto: la voce può puntare all'alias in %LOCALAPPDATA%\Microsoft\WindowsApps\<famiglia>\ o alla
+        // cartella d'installazione con la versione; conta solo la famiglia del pacchetto.
+        string? family = !string.IsNullOrEmpty(appId) && appId.Contains('!') ? appId[..appId.IndexOf('!')] : PackageFamily(exe);
+        return family != null && string.Equals(PackageFamily(handlerName), family, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>"Nome_IdEditore" da un percorso dentro WindowsApps (cartella d'installazione "Nome_Versione_Arch__IdEditore" o alias "Nome_IdEditore").</summary>
+    private static string? PackageFamily(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        const string marker = "\\WindowsApps\\";
+        int start = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return null;
+        start += marker.Length;
+        int end = path.IndexOf('\\', start);
+        if (end < 0) return null;
+        string folder = path[start..end];
+        int first = folder.IndexOf('_'), last = folder.LastIndexOf('_');
+        return first > 0 && last < folder.Length - 1 ? folder[..first] + "_" + folder[(last + 1)..] : null;
+    }
+
+    /// <summary>Apre i file (o le cartelle, solo con Esplora file) con l'app indicata, come "Apri con" di Windows.</summary>
+    public static void OpenFiles(string name, string? exe, string? appId, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return;
+        Native.AllowSetForegroundWindow(Native.ASFW_ANY); // la finestra che si apre deve poter venire in primo piano
+
+        if (IsExplorer(exe, appId))
+        {
+            OpenInExplorer(paths);
+            return;
+        }
+
+        // Le chiamate alla shell possono richiedere qualche istante: fuori dal thread dell'interfaccia, in un thread STA.
+        var groups = paths.GroupBy(p => System.IO.Path.GetExtension(p), StringComparer.OrdinalIgnoreCase).ToList();
+        var thread = new Thread(() =>
+        {
+            foreach (var group in groups)
+            {
+                bool opened = false;
+                ForEachHandler(group.Key, (handler, handlerName, uiName) =>
+                {
+                    if (!HandlerMatches(handlerName, uiName, name, exe, appId)) return false;
+                    opened = InvokeHandler(handler, group.ToList());
+                    return true;
+                });
+                if (!opened) Log.Warn($"{name}: impossibile aprire i file {group.Key} trascinati sull'icona");
+            }
+
+            // Alcune attivazioni proseguono in modo asincrono sul thread che le ha chiamate: lo si tiene vivo (e in
+            // ascolto dei messaggi) ancora qualche secondo.
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+            timer.Start();
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+        }) { IsBackground = true, Name = "OpSecBar.OpenFiles" };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+    }
+
+    private static bool InvokeHandler(Native.IAssocHandler handler, IReadOnlyList<string> paths)
+    {
+        var pidls = new List<IntPtr>();
+        IntPtr items = IntPtr.Zero, data = IntPtr.Zero;
+        try
+        {
+            foreach (string path in paths)
+                if (Native.SHParseDisplayName(path, IntPtr.Zero, out IntPtr pidl, 0, out _) == 0 && pidl != IntPtr.Zero) pidls.Add(pidl);
+            if (pidls.Count == 0 || Native.SHCreateShellItemArrayFromIDLists((uint)pidls.Count, pidls.ToArray(), out items) != 0) return false;
+
+            var array = (Native.IShellItemArray)System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(items);
+            try
+            {
+                Guid bhid = Native.BHID_DataObject, iid = Native.IID_IDataObject;
+                if (array.BindToHandler(IntPtr.Zero, ref bhid, ref iid, out data) != 0 || data == IntPtr.Zero) return false;
+            }
+            finally { System.Runtime.InteropServices.Marshal.ReleaseComObject(array); }
+
+            int hr = handler.Invoke(data);
+            if (hr != 0) Log.Warn($"Apri con: 0x{hr:X8}");
+            return hr == 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Apri con", ex);
+            return false;
+        }
+        finally
+        {
+            if (data != IntPtr.Zero) System.Runtime.InteropServices.Marshal.Release(data);
+            if (items != IntPtr.Zero) System.Runtime.InteropServices.Marshal.Release(items);
+            foreach (IntPtr pidl in pidls) System.Runtime.InteropServices.Marshal.FreeCoTaskMem(pidl);
+        }
+    }
+
+    /// <summary>Esplora file non "apre" i file: mostra le cartelle e seleziona i file nella loro cartella.</summary>
+    private static void OpenInExplorer(IReadOnlyList<string> paths)
+    {
+        foreach (string path in paths.Take(8)) // un trascinamento di centinaia di file non deve aprire centinaia di finestre
+        {
+            try
+            {
+                string argument = System.IO.Directory.Exists(path) ? $"\"{path}\"" : $"/select,\"{path}\"";
+                Process.Start(new ProcessStartInfo("explorer.exe", argument) { UseShellExecute = false })?.Dispose();
+            }
+            catch (Exception ex) { Log.Error("Apertura in Esplora file", ex); }
+        }
+    }
+
     public static void OpenFileLocation(string? path)
     {
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;

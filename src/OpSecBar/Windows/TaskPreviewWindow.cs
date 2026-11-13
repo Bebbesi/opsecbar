@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ManagedShell.WindowsTasks;
 using OpSecBar.Core;
+using OpSecBar.Services;
 
 namespace OpSecBar.Windows;
 
@@ -37,6 +38,12 @@ internal sealed class TaskPreviewWindow : Window
     private IntPtr _hwnd;
     private Card? _peekCandidate;
     private PeekWindow? _peek;
+
+    // Trascinamento: soffermandosi su un'anteprima la sua finestra viene in primo piano, per rilasciarci dentro.
+    private static readonly TimeSpan DragActivateDelay = TimeSpan.FromMilliseconds(400);
+    private readonly DispatcherTimer _dragTimer;
+    private Card? _dragCandidate;
+    private int _dragMoves;
 
     /// <summary>L'utente ha cliccato o chiuso una finestra: la barra deve chiudere l'anteprima.</summary>
     public event Action? Dismissed;
@@ -71,6 +78,21 @@ internal sealed class TaskPreviewWindow : Window
             if (_peekCandidate != null) ShowPeek(_peekCandidate);
         };
 
+        // Qui non si rilascia nulla: l'anteprima serve solo a scegliere la finestra in cui proseguire il trascinamento.
+        // Gli eventi non vengono marcati come gestiti, perché anche la barra li ascolta per tenere aperta l'anteprima.
+        AllowDrop = true;
+        DragEnter += (_, e) => e.Effects = DragDropEffects.None;
+        DragOver += (_, e) => e.Effects = DragDropEffects.None;
+        Drop += (_, e) => e.Effects = DragDropEffects.None;
+        _dragTimer = new DispatcherTimer { Interval = DragActivateDelay };
+        _dragTimer.Tick += (_, _) =>
+        {
+            _dragTimer.Stop();
+            if (_dragCandidate is not { } card) return;
+            Dismiss();
+            TaskListService.ActivateDuringDrag(card.Window);
+        };
+
         // L'handle serve prima di costruire le schede: le miniature DWM vanno registrate sulla nostra finestra.
         _hwnd = new WindowInteropHelper(this).EnsureHandle();
         int ex = GetWindowLong(_hwnd, -20);
@@ -86,6 +108,7 @@ internal sealed class TaskPreviewWindow : Window
         MouseLeave += (_, _) => SetPeekCandidate(null);
         Closed += (_, _) =>
         {
+            _dragTimer.Stop();
             _peekTimer.Stop();
             HidePeek();
             foreach (var c in _cards) Unregister(c);
@@ -176,6 +199,24 @@ internal sealed class TaskPreviewWindow : Window
         };
         close.Click += (_, _) => CloseWindow(card);
 
+        void DragWithin(object? sender, DragEventArgs e)
+        {
+            _dragMoves++; // annulla un'eventuale uscita in sospeso
+            SetDragCandidate(card);
+        }
+        root.DragEnter += DragWithin;
+        root.DragOver += DragWithin;
+        root.DragLeave += (_, _) =>
+        {
+            // Arriva anche passando da un elemento interno della scheda all'altro (subito seguito da un DragEnter).
+            int moves = _dragMoves;
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            {
+                if (moves == _dragMoves && _dragCandidate == card) SetDragCandidate(null);
+            });
+        };
+        root.Drop += (_, _) => SetDragCandidate(null);
+
         _cards.Add(card);
         _panel.Children.Add(root);
     }
@@ -184,14 +225,28 @@ internal sealed class TaskPreviewWindow : Window
     {
         try { card.Window.Close(); } catch (Exception ex) { Log.Error("Anteprima: chiusura", ex); }
         if (_peekCandidate == card) SetPeekCandidate(null);
+        if (_dragCandidate == card) SetDragCandidate(null);
         Unregister(card);
         _cards.Remove(card);
         _panel.Children.Remove(card.Root);
         if (_cards.Count == 0) Dismiss();
     }
 
+    private void SetDragCandidate(Card? card)
+    {
+        if (_dragCandidate == card) return;
+        // Durante un trascinamento il mouse non "passa sopra" le schede: l'evidenziazione va accesa a mano.
+        if (_dragCandidate != null) _dragCandidate.Root.Background = Brushes.Transparent;
+        _dragCandidate = card;
+        _dragTimer.Stop();
+        if (card == null) return;
+        card.Root.Background = (Brush)Application.Current.Resources["PanelHoverBrush"];
+        _dragTimer.Start();
+    }
+
     private void Dismiss()
     {
+        SetDragCandidate(null);
         SetPeekCandidate(null);
         Dismissed?.Invoke();
     }

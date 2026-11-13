@@ -120,12 +120,33 @@ public sealed class TaskListService
         return string.IsNullOrEmpty(file) ? "hwnd:" + w.Handle : "exe:" + file.ToLowerInvariant();
     }
 
-    private static bool Matches(PinnedApp pin, ApplicationWindow w)
+    private readonly Dictionary<IntPtr, string> _appIds = new();
+
+    /// <summary>
+    /// AUMID della finestra. Le app Win32 in pacchetto (es. Claude) non lo mettono sulla finestra: lo si chiede al processo,
+    /// altrimenti un'app fissata dal menu Start non riconoscerebbe le proprie finestre e comparirebbe due volte.
+    /// </summary>
+    private string AppIdOf(ApplicationWindow w)
     {
-        if (!string.IsNullOrEmpty(pin.AppId) && string.Equals(pin.AppId, w.AppUserModelID, StringComparison.OrdinalIgnoreCase)) return true;
+        string? id = w.AppUserModelID;
+        if (!string.IsNullOrEmpty(id)) return id;
+        if (_appIds.TryGetValue(w.Handle, out id)) return id;
+        try { id = Native.PackagedAppId(w.Handle); } catch { id = null; }
+        return _appIds[w.Handle] = id ?? "";
+    }
+
+    private bool Matches(PinnedApp pin, ApplicationWindow w)
+    {
+        if (!string.IsNullOrEmpty(pin.AppId) && string.Equals(pin.AppId, AppIdOf(w), StringComparison.OrdinalIgnoreCase)) return true;
         string? file = w.WinFileName;
         if (string.IsNullOrEmpty(file)) return false;
-        if (!string.IsNullOrEmpty(pin.TargetPath) && string.Equals(pin.TargetPath, file, StringComparison.OrdinalIgnoreCase)) return true;
+        if (!string.IsNullOrEmpty(pin.TargetPath))
+        {
+            if (string.Equals(pin.TargetPath, file, StringComparison.OrdinalIgnoreCase)) return true;
+            // App Squirrel (Discord, ...): il collegamento punta a Update.exe, l'app vera sta in una sottocartella "app-x.y.z".
+            if (pin.TargetPath.EndsWith("\\Update.exe", StringComparison.OrdinalIgnoreCase) &&
+                file.StartsWith(pin.TargetPath[..^"Update.exe".Length] + "app-", StringComparison.OrdinalIgnoreCase)) return true;
+        }
         // Esplora file non ha un percorso di destinazione nel catalogo delle app.
         return pin.AppId == "Microsoft.Windows.Explorer" && file.EndsWith("\\explorer.exe", StringComparison.OrdinalIgnoreCase);
     }
@@ -144,6 +165,7 @@ public sealed class TaskListService
         {
             gone.PropertyChanged -= OnWindowPropertyChanged;
             _hooked.Remove(gone);
+            _appIds.Remove(gone.Handle);
         }
 
         var existing = Items.ToDictionary(i => i.Key);
@@ -231,11 +253,14 @@ public sealed class TaskListService
         if (item.IsPinned || item.Windows.Count == 0) return;
         var w = item.Windows[0];
         string? file = w.WinFileName;
-        bool uwp = w.IsUWP && !string.IsNullOrEmpty(w.AppUserModelID);
+        // App in pacchetto (UWP o Win32 MSIX): si fissa l'AUMID, come fa il menu Start. Il percorso dell'eseguibile
+        // contiene la versione e cambierebbe a ogni aggiornamento.
+        string appId = AppIdOf(w);
+        bool uwp = (w.IsUWP && !string.IsNullOrEmpty(appId)) || appId.Contains('!');
         if (!uwp && string.IsNullOrEmpty(file)) return;
 
         string name = !string.IsNullOrWhiteSpace(w.WinFileDescription) ? w.WinFileDescription : w.Title ?? "App";
-        Pin(new PinnedApp { Name = name, AppId = uwp ? w.AppUserModelID : null, TargetPath = uwp ? null : file });
+        Pin(new PinnedApp { Name = name, AppId = uwp ? appId : null, TargetPath = uwp ? null : file });
     }
 
     public void Unpin(PinnedApp app)
@@ -297,6 +322,53 @@ public sealed class TaskListService
             }
             catch (Exception ex) { Log.Warn($"End task fallito per {process.ProcessName}: {ex.Message}"); }
         }
+    }
+
+    // ---- File trascinati su un'icona ----------------------------------------------------------------
+
+    /// <summary>Nome, eseguibile e identificativo con cui riconoscere l'app dell'icona tra quelle di "Apri con".</summary>
+    private (string Name, string? Exe, string? AppId) OpenTarget(AppItem item)
+    {
+        ApplicationWindow? w = item.Windows.FirstOrDefault();
+        string? exe = item.Pin?.TargetPath;
+        if (string.IsNullOrEmpty(exe) && w is { IsUWP: false }) exe = w.WinFileName;
+        string? appId = item.Pin?.AppId;
+        if (string.IsNullOrEmpty(appId) && w != null) appId = AppIdOf(w);
+        string name = item.Pin?.Name is { Length: > 0 } pinName ? pinName : item.Title;
+        return (name, exe, string.IsNullOrEmpty(appId) ? null : appId);
+    }
+
+    /// <summary>True se rilasciando questi file sull'icona l'app li apre (Windows la elenca in "Apri con" per quei tipi).</summary>
+    public bool CanOpenFiles(AppItem item, IReadOnlyList<string> paths)
+    {
+        var (name, exe, appId) = OpenTarget(item);
+        return AppCatalogService.CanOpenFiles(name, exe, appId, paths);
+    }
+
+    /// <summary>Apre i file con l'app rappresentata dall'icona (in esecuzione oppure no).</summary>
+    public void OpenFiles(AppItem item, IReadOnlyList<string> paths)
+    {
+        var (name, exe, appId) = OpenTarget(item);
+        AppCatalogService.OpenFiles(name, exe, appId, paths);
+    }
+
+    /// <summary>
+    /// Porta in primo piano una finestra mentre l'utente sta trascinando qualcosa. L'input del trascinamento appartiene
+    /// all'app di origine, quindi Windows può negarci il cambio di primo piano: in quel caso lo si forza.
+    /// </summary>
+    public static void ActivateDuringDrag(ApplicationWindow w)
+    {
+        try
+        {
+            w.BringToFront();
+            IntPtr foreground = Native.GetForegroundWindow();
+            if (foreground == w.Handle) return;
+            // Un popup della stessa app in primo piano va bene così (es. una finestra di dialogo modale).
+            Native.GetWindowThreadProcessId(foreground, out uint foregroundPid);
+            Native.GetWindowThreadProcessId(w.Handle, out uint pid);
+            if (foregroundPid != pid) Native.ForceForeground(w.Handle, allowKeyTap: false);
+        }
+        catch (Exception ex) { Log.Error("Attivazione durante il trascinamento", ex); }
     }
 
     /// <summary>Avvia una nuova istanza dell'app rappresentata dall'icona.</summary>
