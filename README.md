@@ -107,7 +107,9 @@ Click it to expand it with a progress bar.
 - Optional: CPU / RAM / battery.
 
 ### Start menu
-Search, favorites, all installed apps (Win32 and Store), and lock / sign out / sleep / restart / shut down.
+Search, favorites, your apps, and lock / sign out / sleep / restart / shut down. The app list shows the shortcuts in
+your Start Menu `Programs` folder (including Steam games); **Settings → Start menu → App list** switches it to all
+installed apps (Win32 and Store).
 It opens from the Start button **and from the Windows key**; other shortcuts (Win+E, Win+D, Win+L…) stay with Windows.
 
 ### Settings

@@ -132,7 +132,7 @@ public partial class App : Application
             RegisterSignals();
             ApplyWinKey();
             SeedDefaultsOnFirstRun();
-            _ = Catalog.GetAppsAsync();
+            _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
 
             if (e.Args.Contains("--settings")) ShowSettings();
             if (e.Args.Contains("--updated")) Log.Info($"Aggiornato alla versione {Updates.CurrentLabel}");
@@ -319,6 +319,11 @@ public partial class App : Application
                 case nameof(AppSettings.RecentColors):
                 case nameof(AppSettings.PinnedTrayIcons):
                     break; // solo da salvare
+                case nameof(AppSettings.StartAppSource):
+                    // L'elenco si prepara subito, così alla prossima apertura il menu mostra già la sorgente giusta.
+                    if (_startMenu != null) _startMenu.LoadApps();
+                    else _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
+                    break;
                 case nameof(AppSettings.StartFavorites):
                 case nameof(AppSettings.StartShowFavorites):
                 case nameof(AppSettings.StartMenuWidth):

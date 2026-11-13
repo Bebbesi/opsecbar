@@ -95,7 +95,7 @@ public partial class StartMenuWindow : Window
             });
         });
 
-        if (!_loaded) LoadApps();
+        LoadApps(); // subito pronto se l'elenco è già in memoria; riletto se la cartella del menu Start è cambiata
     }
 
     private int _openSeq;
@@ -301,11 +301,16 @@ public partial class StartMenuWindow : Window
 
     // ---- Dati ------------------------------------------------------------------------------------
 
-    private async void LoadApps()
+    /// <summary>Carica l'elenco delle app dalla sorgente scelta nelle impostazioni (cartella del menu Start o tutte le app).</summary>
+    public async void LoadApps()
     {
         try
         {
-            _allApps = await _app.Catalog.GetAppsAsync();
+            StartAppSource source = _app.Settings.StartAppSource;
+            List<AppEntry> apps = await _app.Catalog.GetStartAppsAsync(source);
+            if (source != _app.Settings.StartAppSource) return;      // sorgente cambiata nel frattempo
+            if (_loaded && ReferenceEquals(apps, _allApps)) return;  // stesso elenco già mostrato
+            _allApps = apps;
             _loaded = true;
             ApplyFilter();
         }

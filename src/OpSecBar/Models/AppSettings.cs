@@ -20,6 +20,12 @@ public enum BarWidget { Apps, Media, Gifs, SysInfo, Volume, Clock, Tray, QuickSe
 /// <summary>Zone della barra: inizio (sinistra/alto), centro, fine (destra/basso).</summary>
 public enum BarZone { Start, Center, End }
 
+/// <summary>
+/// Da dove il menu Start prende l'elenco delle app: i collegamenti nella cartella "Start Menu\Programs" dell'utente,
+/// oppure tutte le app installate (shell:AppsFolder, comprese quelle dello Store).
+/// </summary>
+public enum StartAppSource { StartMenuFolder, AllInstalled }
+
 /// <summary>Disposizione degli elementi sulla barra: per ogni zona, gli elementi nell'ordine in cui compaiono.</summary>
 public class BarLayout
 {
@@ -209,6 +215,7 @@ public class AppSettings : ObservableObject
     private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true, _preReleaseUpdates;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _useWinKey = true;
+    private StartAppSource _startAppSource = StartAppSource.StartMenuFolder;
     private string _clockFormat = "", _dateFormat = "";
     private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
     private double _gifSize;
@@ -273,6 +280,8 @@ public class AppSettings : ObservableObject
     public double StartMenuWidth { get => _startMenuWidth; set => Set(ref _startMenuWidth, value); }
     public double StartMenuHeight { get => _startMenuHeight; set => Set(ref _startMenuHeight, value); }
     public bool StartShowFavorites { get => _startShowFavorites; set => Set(ref _startShowFavorites, value); }
+    /// <summary>Quali app elenca il menu Start (predefinito: la cartella "Start Menu\Programs" dell'utente).</summary>
+    public StartAppSource StartAppSource { get => _startAppSource; set => Set(ref _startAppSource, value); }
     /// <summary>Il tasto Windows apre il menu Start di OpSecBar invece di quello di Windows.</summary>
     public bool UseWinKey { get => _useWinKey; set => Set(ref _useWinKey, value); }
 

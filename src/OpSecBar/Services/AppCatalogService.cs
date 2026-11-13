@@ -49,32 +49,195 @@ public sealed class AppEntry : ObservableObject
 /// <summary>Elenco delle app installate (Win32 e UWP), come lo vede il menu Start di Windows.</summary>
 public sealed class AppCatalogService
 {
-    private Task<List<AppEntry>>? _loadTask;
+    private volatile Task<List<AppEntry>>? _loadTask;   // tutte le app installate
+    private volatile Task<List<AppEntry>>? _folderTask; // solo la cartella "Start Menu\Programs" dell'utente
 
     private static readonly string[] SkippedExtensions = { ".url", ".chm", ".txt", ".htm", ".html", ".pdf", ".rtf", ".msc" };
     private static readonly string[] SkippedWords = { "uninstall", "disinstalla", "readme", "leggimi" };
 
+    /// <summary>Tutte le app installate (shell:AppsFolder).</summary>
     public Task<List<AppEntry>> GetAppsAsync(bool refresh = false)
     {
-        if (_loadTask == null || refresh || _loadTask.IsFaulted) _loadTask = LoadAsync();
-        return _loadTask;
+        Task<List<AppEntry>>? task = _loadTask;
+        if (task == null || refresh || task.IsFaulted) _loadTask = task = RunSta(Enumerate, "Enumerazione app installate fallita");
+        return task;
     }
 
-    private static Task<List<AppEntry>> LoadAsync()
+    /// <summary>Le app da elencare nel menu Start, secondo la sorgente scelta nelle impostazioni.</summary>
+    public Task<List<AppEntry>> GetStartAppsAsync(StartAppSource source)
+    {
+        WatchStartFolder();
+        if (source == StartAppSource.AllInstalled) return GetAppsAsync();
+        Task<List<AppEntry>>? task = _folderTask;
+        if (task == null || task.IsFaulted) _folderTask = task = LoadStartFolderAsync();
+        return task;
+    }
+
+    private async Task<List<AppEntry>> LoadStartFolderAsync()
+    {
+        // L'elenco di shell:AppsFolder serve a riconoscere i collegamenti (stesso identificativo, icona e percorso
+        // dell'altra modalità: preferiti e app fissate restano gli stessi cambiando sorgente).
+        List<AppEntry> installed = await GetAppsAsync().ConfigureAwait(false);
+        return await RunSta(() => EnumerateStartFolder(installed), "Lettura della cartella del menu Start fallita").ConfigureAwait(false);
+    }
+
+    private static Task<List<AppEntry>> RunSta(Func<List<AppEntry>> work, string error)
     {
         var tcs = new TaskCompletionSource<List<AppEntry>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
-            try { tcs.SetResult(Enumerate()); }
+            try { tcs.SetResult(work()); }
             catch (Exception ex)
             {
-                Log.Error("Enumerazione app installate fallita", ex);
+                Log.Error(error, ex);
                 tcs.SetResult(new List<AppEntry>());
             }
         }) { IsBackground = true, Name = "OpSecBar.AppCatalog" };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         return tcs.Task;
+    }
+
+    // ---- Cartella "Start Menu\Programs" dell'utente ---------------------------------------------
+
+    private static readonly string[] StartFolderExtensions = { ".lnk", ".url", ".appref-ms", ".exe" };
+    private System.IO.FileSystemWatcher? _watcher;
+
+    private static string StartFolder => Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+
+    /// <summary>Un collegamento aggiunto o tolto (app installata o rimossa): alla prossima apertura l'elenco viene riletto.</summary>
+    private void WatchStartFolder()
+    {
+        if (_watcher != null) return;
+        try
+        {
+            string root = StartFolder;
+            if (!System.IO.Directory.Exists(root)) return;
+            _watcher = new System.IO.FileSystemWatcher(root)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = System.IO.NotifyFilters.FileName | System.IO.NotifyFilters.DirectoryName | System.IO.NotifyFilters.LastWrite
+            };
+            void Invalidate(object? sender, EventArgs e)
+            {
+                _folderTask = null;
+                _loadTask = null;
+            }
+            _watcher.Created += Invalidate;
+            _watcher.Deleted += Invalidate;
+            _watcher.Changed += Invalidate;
+            _watcher.Renamed += Invalidate;
+            _watcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) { Log.Warn("Sorveglianza della cartella del menu Start: " + ex.Message); }
+    }
+
+    private static List<AppEntry> EnumerateStartFolder(List<AppEntry> installed)
+    {
+        var list = new List<AppEntry>();
+        string root = StartFolder;
+        if (!System.IO.Directory.Exists(root)) return list;
+        Type? shellType = Type.GetTypeFromProgID("Shell.Application");
+        if (shellType == null) return list;
+        dynamic shell = Activator.CreateInstance(shellType)!;
+
+        var byName = installed.ToLookup(a => a.Name, StringComparer.CurrentCultureIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            dynamic? folder = null;
+            try { folder = shell.NameSpace(pending.Pop()); } catch { }
+            if (folder == null) continue;
+
+            foreach (dynamic item in folder.Items())
+            {
+                try
+                {
+                    string path = item.Path;
+                    if (System.IO.Directory.Exists(path))
+                    {
+                        pending.Push(path);
+                        continue;
+                    }
+                    AppEntry? entry = FromStartFolderFile((object)item, path, byName);
+                    if (entry != null && seen.Add(entry.Key)) list.Add(entry);
+                }
+                catch { /* voce non leggibile: si salta */ }
+            }
+        }
+
+        return list.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    private static AppEntry? FromStartFolderFile(dynamic item, string path, ILookup<string, AppEntry> byName)
+    {
+        string ext = System.IO.Path.GetExtension(path);
+        if (!StartFolderExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)) return null;
+
+        // Nome come lo mostra Windows (tiene conto dei nomi localizzati); l'estensione, se visibile, si toglie.
+        string name = item.Name;
+        if (name.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) name = name[..^ext.Length];
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        string lower = name.ToLowerInvariant();
+        if (SkippedWords.Any(lower.Contains)) return null;
+
+        if (ext.Equals(".url", StringComparison.OrdinalIgnoreCase))
+        {
+            // Collegamenti a un protocollo (es. i giochi di Steam: steam://rungameid/...). Le pagine web non sono app.
+            string url = InternetShortcutUrl(path).ToLowerInvariant();
+            if (url.Length == 0 || url.StartsWith("http://") || url.StartsWith("https://")) return null;
+            return new AppEntry { Name = name, TargetPath = path };
+        }
+
+        string? target = null, arguments = null;
+        if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                dynamic link = item.GetLink;
+                target = link.Path as string;
+                arguments = link.Arguments as string;
+            }
+            catch { /* collegamento non risolvibile: lo si avvia così com'è */ }
+
+            string probe = (target ?? "").ToLowerInvariant();
+            if (SkippedExtensions.Any(probe.EndsWith)) return null;
+            if (probe.StartsWith("http://") || probe.StartsWith("https://")) return null;
+        }
+
+        // La stessa app in shell:AppsFolder, se c'è: stesso nome e, quando più voci hanno quel nome, stessa destinazione.
+        AppEntry? known = null;
+        foreach (AppEntry candidate in byName[name])
+        {
+            known ??= candidate;
+            if (!string.IsNullOrEmpty(target) && string.Equals(candidate.TargetPath, target, StringComparison.OrdinalIgnoreCase))
+            {
+                known = candidate;
+                break;
+            }
+        }
+        if (known != null) return known;
+
+        // Altrimenti si avvia il collegamento stesso (conserva argomenti e cartella di lavoro); se punta a un semplice
+        // eseguibile senza argomenti si usa quello, così l'icona fissata sulla barra riconosce le sue finestre.
+        bool plainExe = !string.IsNullOrEmpty(target) && string.IsNullOrWhiteSpace(arguments) &&
+                        target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(target);
+        return new AppEntry { Name = name, TargetPath = plainExe ? target : path };
+    }
+
+    /// <summary>Il valore "URL=" di un file .url (stringa vuota se manca).</summary>
+    private static string InternetShortcutUrl(string path)
+    {
+        try
+        {
+            foreach (string line in System.IO.File.ReadLines(path))
+                if (line.StartsWith("URL=", StringComparison.OrdinalIgnoreCase)) return line[4..].Trim();
+        }
+        catch { /* file non leggibile */ }
+        return "";
     }
 
     private static List<AppEntry> Enumerate()

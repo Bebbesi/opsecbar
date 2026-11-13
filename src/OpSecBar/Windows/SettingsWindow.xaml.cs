@@ -982,6 +982,19 @@ public partial class SettingsWindow : Window
         var open = Section("Open");
         Row(open, "Open with the Windows key", "Shortcuts such as Win+E, Win+D and Win+L keep working as usual.", Toggle(S.UseWinKey, v => S.UseWinKey = v));
 
+        var apps = Section("Apps");
+        Row(apps, "App list",
+            "Start Menu folder: the shortcuts in your Start Menu \"Programs\" folder. All installed apps: everything Windows knows about, including Store apps.",
+            ComboCtl(new[]
+            {
+                (StartAppSource.StartMenuFolder, "Start Menu folder"), (StartAppSource.AllInstalled, "All installed apps")
+            }, S.StartAppSource, v => S.StartAppSource = v, 200));
+        RowCustom(apps, new TextBlock
+        {
+            Text = Environment.GetFolderPath(Environment.SpecialFolder.Programs), Opacity = 0.7,
+            TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center
+        }, Btn("Open folder", () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Environment.GetFolderPath(Environment.SpecialFolder.Programs)}\"") { UseShellExecute = false })?.Dispose()));
+
         var layout = Section("Layout");
         Row(layout, "Width", null, SliderCtl(S.StartMenuWidth, 320, 800, 10, "0 px", v => S.StartMenuWidth = v));
         Row(layout, "Height", null, SliderCtl(S.StartMenuHeight, 380, 1000, 10, "0 px", v => S.StartMenuHeight = v));
