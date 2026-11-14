@@ -42,6 +42,8 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         ApplyPalette();
         VersionText.Text = "Version " + _app.Updates.CurrentLabel;
+        // Le build di prova (tag bAAAAMMGG, pubblicate come pre-release) lo dicono accanto al nome; le release stabili no.
+        BetaText.Visibility = _app.Updates.CurrentBuild != null ? Visibility.Visible : Visibility.Collapsed;
 
         SourceInitialized += (_, _) => ApplyTitleBar();
         _app.SettingsService.Changed += OnSettingChanged;

@@ -386,6 +386,8 @@
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="14,14,0,18">
                 <Image Source="/Assets/opsecbar.ico" Width="20" Height="20" RenderOptions.BitmapScalingMode="HighQuality" />
                 <TextBlock Text="OpSec Bar" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <!-- Solo sulle build di prova (pre-release): lo decide il codice -->
+                <TextBlock x:Name="BetaText" Text="Beta version" Visibility="Collapsed" Foreground="#FFD43B" FontSize="11" FontWeight="SemiBold" Margin="8,1,0,0" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock x:Name="VersionText" DockPanel.Dock="Bottom" Foreground="{DynamicResource S.Text3}" FontSize="12" Margin="14,8,0,2" />
             <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource S.NavItem}"
