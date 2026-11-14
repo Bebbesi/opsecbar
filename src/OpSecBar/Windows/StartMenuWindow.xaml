@@ -57,6 +57,50 @@
                 </StackPanel>
             </Button>
         </DataTemplate>
+
+        <!-- Pulsante a tutta larghezza per le righe della sezione "Recent" -->
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource PanelButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelPressedBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Riga della sezione "Recent" -->
+        <DataTemplate x:Key="RecentTemplate">
+            <Button Style="{StaticResource RowButton}" Height="36" Margin="0,1" Padding="0"
+                    Click="Recent_Click" MouseRightButtonUp="Recent_RightClick" ToolTip="{Binding Name}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Width="24" Height="24" Margin="8,0,12,0">
+                        <Image Source="{Binding App.Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                        <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
+                            <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding App.Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                        </Rectangle>
+                    </Grid>
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding When}" VerticalAlignment="Center" Margin="10,0,10,0" FontSize="11.5"
+                               Foreground="{DynamicResource PanelFgDimBrush}" />
+                </Grid>
+            </Button>
+        </DataTemplate>
     </local:FlyoutWindow.Resources>
 
     <Grid x:Name="RootGrid" Margin="14">
@@ -71,6 +115,7 @@
 
         <Grid Margin="16">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -108,8 +153,14 @@
                            Text="Right-click an app below to add it to your favorites." />
             </StackPanel>
 
+            <!-- Aperte di recente -->
+            <StackPanel x:Name="RecentSection" Grid.Row="2" Margin="0,14,0,0" Visibility="Collapsed">
+                <TextBlock Text="Recent" FontWeight="SemiBold" Margin="4,0,0,6" />
+                <ItemsControl x:Name="RecentList" ItemTemplate="{StaticResource RecentTemplate}" Focusable="False" />
+            </StackPanel>
+
             <!-- Tutte le app / risultati -->
-            <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid Grid.Row="3" Margin="0,14,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -124,7 +175,7 @@
             </Grid>
 
             <!-- Piede: utente, impostazioni, alimentazione -->
-            <Border Grid.Row="3" Margin="0,12,0,0" Padding="0,10,0,0" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
+            <Border Grid.Row="4" Margin="0,12,0,0" Padding="0,10,0,0" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,0,0">
                         <Border Width="28" Height="28" CornerRadius="14" Background="{DynamicResource AccentDimBrush}">

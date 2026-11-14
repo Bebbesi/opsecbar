@@ -1010,6 +1010,8 @@ public partial class SettingsWindow : Window
         Row(layout, "Width", null, SliderCtl(S.StartMenuWidth, 320, 800, 10, "0 px", v => S.StartMenuWidth = v));
         Row(layout, "Height", null, SliderCtl(S.StartMenuHeight, 380, 1000, 10, "0 px", v => S.StartMenuHeight = v));
         Row(layout, "Show favorites", null, Toggle(S.StartShowFavorites, v => S.StartShowFavorites = v));
+        Row(layout, "Show recent apps", "The last apps you opened from OpSec Bar. Search results also put the apps you opened most in the last 30 days first.",
+            Toggle(S.StartShowRecent, v => S.StartShowRecent = v));
 
         SectionHeader("Favorites", "Right-click an app in the Start menu to add it here.");
         var fav = Card();

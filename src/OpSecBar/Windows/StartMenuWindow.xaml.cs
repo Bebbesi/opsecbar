@@ -35,6 +35,7 @@ public partial class StartMenuWindow : FlyoutWindow
     {
         SearchBox.Text = "";
         RefreshFavorites();
+        RefreshRecent();
         ApplyFilter();
     }
 
@@ -50,7 +51,11 @@ public partial class StartMenuWindow : FlyoutWindow
         AppSettings s = _app.Settings;
         Width = Math.Clamp(s.StartMenuWidth, 320, 900) + ShadowMargin * 2;
         Height = Math.Clamp(s.StartMenuHeight, 380, 1200) + ShadowMargin * 2;
-        if (IsVisible) RefreshFavorites();
+        if (IsVisible)
+        {
+            RefreshFavorites();
+            RefreshRecent();
+        }
         base.ApplyTheme();
     }
 
@@ -85,6 +90,7 @@ public partial class StartMenuWindow : FlyoutWindow
     {
         bool searching = !string.IsNullOrWhiteSpace(SearchBox.Text);
         FavoritesSection.Visibility = _app.Settings.StartShowFavorites && !searching ? Visibility.Visible : Visibility.Collapsed;
+        RecentSection.Visibility = _hasRecent && !searching ? Visibility.Visible : Visibility.Collapsed;
         ListHeader.Text = searching ? "Results" : "All apps";
         SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -95,10 +101,18 @@ public partial class StartMenuWindow : FlyoutWindow
         IEnumerable<AppEntry> result = _allApps;
         if (query.Length > 0)
         {
+            // Prima le app il cui nome (o una sua parola) inizia con la ricerca, poi quelle che la contengono a metà
+            // parola; in ciascun gruppo le più aperte negli ultimi 30 giorni, poi le più recenti, poi in ordine alfabetico.
             result = _allApps
-                .Where(a => a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-                .OrderBy(a => a.Name.StartsWith(query, StringComparison.CurrentCultureIgnoreCase) ? 0 : 1)
-                .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase);
+                .Select(a => (App: a, Rank: MatchRank(a.Name, query)))
+                .Where(x => x.Rank >= 0)
+                .Select(x => (x.App, x.Rank, Uses: UsageService.LaunchCount(x.App.Key, x.App.TargetPath),
+                              Last: UsageService.LastUsed(x.App.Key) ?? DateTime.MinValue))
+                .OrderBy(x => x.Rank)
+                .ThenByDescending(x => x.Uses)
+                .ThenByDescending(x => x.Last)
+                .ThenBy(x => x.App.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(x => x.App);
         }
         var list = result.ToList();
         AppList.ItemsSource = list;
@@ -109,7 +123,72 @@ public partial class StartMenuWindow : FlyoutWindow
         UpdateSections();
     }
 
+    /// <summary>0 = il nome o una sua parola inizia con la ricerca; 1 = la contiene a metà parola; -1 = nessuna corrispondenza.</summary>
+    private static int MatchRank(string name, string query)
+    {
+        var cmp = StringComparison.CurrentCultureIgnoreCase;
+        int index = name.IndexOf(query, cmp);
+        if (index < 0) return -1;
+        while (index >= 0)
+        {
+            if (index == 0 || !char.IsLetterOrDigit(name[index - 1])) return 0;
+            index = name.IndexOf(query, index + 1, cmp);
+        }
+        return 1;
+    }
+
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+
+    // ---- Recenti ---------------------------------------------------------------------------------
+
+    private const int RecentCount = 4;
+
+    private void RefreshRecent()
+    {
+        var recent = _app.Settings.StartShowRecent
+            ? UsageService.Recent(RecentCount).Select(r => new RecentEntry(AppEntry.From(r.ToPinned()), r.LastUsed)).ToList()
+            : new List<RecentEntry>();
+        RecentList.ItemsSource = recent;
+        _hasRecent = recent.Count > 0;
+        UpdateSections();
+    }
+
+    private bool _hasRecent;
+
+    /// <summary>Voce della sezione "Recent": l'app e quanto tempo fa è stata aperta.</summary>
+    public sealed class RecentEntry
+    {
+        public RecentEntry(AppEntry app, DateTime lastUsedUtc)
+        {
+            App = app;
+            When = Ago(DateTime.UtcNow - lastUsedUtc);
+        }
+
+        public AppEntry App { get; }
+        public string Name => App.Name;
+        public string When { get; }
+
+        private static string Ago(TimeSpan t) =>
+            t.TotalMinutes < 1 ? "Just now"
+            : t.TotalHours < 1 ? $"{(int)t.TotalMinutes} min ago"
+            : t.TotalDays < 1 ? $"{(int)t.TotalHours} h ago"
+            : t.TotalDays < 2 ? "Yesterday"
+            : $"{(int)t.TotalDays} days ago";
+    }
+
+    private void Recent_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is RecentEntry r) Launch(r.App, AdminModifiers);
+    }
+
+    private void Recent_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is RecentEntry r)
+        {
+            e.Handled = true;
+            ShowAppMenu(r.App, fe, recent: true);
+        }
+    }
 
     // ---- Interazione -----------------------------------------------------------------------------
 
@@ -182,7 +261,7 @@ public partial class StartMenuWindow : FlyoutWindow
         }
     }
 
-    private void ShowAppMenu(AppEntry app, FrameworkElement target)
+    private void ShowAppMenu(AppEntry app, FrameworkElement target, bool recent = false)
     {
         AppSettings s = _app.Settings;
         PinnedApp pinned = app.ToPinned();
@@ -218,6 +297,22 @@ public partial class StartMenuWindow : FlyoutWindow
             {
                 HideFlyout();
                 AppCatalogService.OpenFileLocation(app.TargetPath);
+            }));
+        }
+
+        if (recent)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Ui.MenuEntry("Remove from Recent", "", () =>
+            {
+                UsageService.Forget(pinned.Key);
+                RefreshRecent();
+            }));
+            menu.Items.Add(Ui.MenuEntry("Clear Recent", "", () =>
+            {
+                UsageService.Clear();
+                RefreshRecent();
+                ApplyFilter();
             }));
         }
         menu.IsOpen = true;

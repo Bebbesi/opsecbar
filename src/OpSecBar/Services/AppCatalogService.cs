@@ -281,6 +281,7 @@ public sealed class AppCatalogService
     /// <summary>Avvia l'app. Restituisce false solo se l'avvio come amministratore non è supportato da quell'app.</summary>
     public static bool Launch(PinnedApp app, bool asAdmin = false)
     {
+        UsageService.RecordLaunch(app);
         if (asAdmin) return RunAsAdmin(app);
         try
         {

@@ -427,8 +427,13 @@ public sealed class TaskListService
         if (item.Windows.Count == 0) return;
         var w = item.Windows[0];
         if (w.IsUWP && !string.IsNullOrEmpty(w.AppUserModelID))
-            AppCatalogService.Launch(new PinnedApp { Name = w.Title ?? "", AppId = w.AppUserModelID });
+            AppCatalogService.Launch(new PinnedApp { Name = AppName(w), AppId = w.AppUserModelID });
         else if (!string.IsNullOrEmpty(w.WinFileName))
-            AppCatalogService.Launch(new PinnedApp { Name = w.Title ?? "", TargetPath = w.WinFileName }, asAdmin);
+            AppCatalogService.Launch(new PinnedApp { Name = AppName(w), TargetPath = w.WinFileName }, asAdmin);
     }
+
+    /// <summary>Nome dell'app di una finestra (descrizione dell'eseguibile, non il titolo della finestra).</summary>
+    private static string AppName(ManagedShell.WindowsTasks.ApplicationWindow w) =>
+        !string.IsNullOrWhiteSpace(w.WinFileDescription) ? w.WinFileDescription
+        : !string.IsNullOrEmpty(w.WinFileName) ? System.IO.Path.GetFileNameWithoutExtension(w.WinFileName) : w.Title ?? "";
 }
