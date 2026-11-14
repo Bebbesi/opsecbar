@@ -177,6 +177,21 @@ public partial class App : Application
 
     public IReadOnlyList<TaskbarWindow> Bars => _bars;
 
+    /// <summary>Lato su cui la taskbar di Windows nascosta lascia una fascia vuota su uno degli schermi; -1 se nessuno.</summary>
+    public int HiddenTaskbarGapEdge()
+    {
+        foreach (TaskbarWindow bar in _bars)
+        {
+            try
+            {
+                int edge = bar.HiddenTaskbarGapEdge();
+                if (edge >= 0) return edge;
+            }
+            catch (Exception ex) { Log.Error("HiddenTaskbarGapEdge", ex); }
+        }
+        return -1;
+    }
+
     private string _screenLayout = "";
     private bool _recreateOnlyIfScreensChanged;
 

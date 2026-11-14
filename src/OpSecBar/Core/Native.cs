@@ -181,6 +181,14 @@ internal static class Native
     [DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT placement);
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
 
+    /// <summary>Monitor (rettangolo intero e area di lavoro) che contiene il rettangolo indicato.</summary>
+    public static MONITORINFO MonitorOf(RECT rect)
+    {
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(MonitorFromRect(ref rect, MONITOR_DEFAULTTONEAREST), ref info);
+        return info;
+    }
+
     // ---- Icone shell -------------------------------------------------------------------------
     [StructLayout(LayoutKind.Sequential)]
     public struct SIZE { public int cx, cy; }

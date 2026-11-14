@@ -109,13 +109,14 @@ public static class TaskbarGuard
     /// 1 alto, 2 destra, 3 basso) dello schermo indicato; 0 se su quel lato non ce n'è una.
     /// Anche nascosta, la taskbar resta registrata come AppBar e Windows ne tiene riservato lo spazio.
     /// </summary>
-    internal static int DockedTaskbarThickness(Native.RECT screen, int edge)
+    internal static int DockedTaskbarThickness(Native.RECT screen, int edge, bool hiddenOnly = false)
     {
         int best = 0;
         try
         {
             foreach (IntPtr h in FindExplorerTaskbars())
             {
+                if (hiddenOnly && Native.IsWindowVisible(h)) continue;
                 if (!Native.GetWindowRect(h, out Native.RECT r) || r.Width <= 0 || r.Height <= 0) continue;
                 int cx = r.Left + r.Width / 2, cy = r.Top + r.Height / 2;
                 if (cx < screen.Left || cx >= screen.Right || cy < screen.Top || cy >= screen.Bottom) continue;
@@ -139,6 +140,38 @@ public static class TaskbarGuard
         }
         catch (Exception ex) { Log.Error("DockedTaskbarThickness", ex); }
         return best;
+    }
+
+    /// <summary>
+    /// Lato (ABE_*: 0 sinistra, 1 alto, 2 destra, 3 basso) su cui la taskbar di Windows, nascosta, tiene ancora libera
+    /// una fascia dello schermo indicato, se è diverso da <paramref name="barEdge"/> (il lato di OpSecBar); -1 se non c'è.
+    /// Sul lato di OpSecBar la barra si disegna sopra la fascia. Sugli altri lati Windows 11 non permette a un'altra app
+    /// di liberarla (ignora l'auto-hide richiesto via ABM_SETSTATE e ripristina l'area di lavoro se la si modifica):
+    /// le finestre massimizzate si fermano prima del bordo e l'unico rimedio è mettere le due barre sullo stesso lato.
+    /// </summary>
+    internal static int HiddenTaskbarGapEdge(Native.RECT screen, int barEdge)
+    {
+        try
+        {
+            Native.MONITORINFO info = Native.MonitorOf(screen);
+            Native.RECT monitor = info.rcMonitor, work = info.rcWork;
+            for (int edge = 0; edge < 4; edge++)
+            {
+                if (edge == barEdge) continue;
+                int taskbar = DockedTaskbarThickness(monitor, edge, hiddenOnly: true);
+                if (taskbar <= 0) continue;
+                int inset = edge switch
+                {
+                    0 => work.Left - monitor.Left,
+                    1 => work.Top - monitor.Top,
+                    2 => monitor.Right - work.Right,
+                    _ => monitor.Bottom - work.Bottom
+                };
+                if (Math.Abs(inset - taskbar) <= 2) return edge; // la fascia è proprio quella della taskbar
+            }
+        }
+        catch (Exception ex) { Log.Error("HiddenTaskbarGapEdge", ex); }
+        return -1;
     }
 
     /// <summary>

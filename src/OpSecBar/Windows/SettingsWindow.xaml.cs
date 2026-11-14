@@ -46,6 +46,7 @@ public partial class SettingsWindow : Window
         BetaText.Visibility = _app.Updates.CurrentBuild != null ? Visibility.Visible : Visibility.Collapsed;
 
         SourceInitialized += (_, _) => ApplyTitleBar();
+        Activated += (_, _) => RefreshGapNoticeIfChanged();
         _app.SettingsService.Changed += OnSettingChanged;
         Closed += (_, _) => _app.SettingsService.Changed -= OnSettingChanged;
 
@@ -139,6 +140,8 @@ public partial class SettingsWindow : Window
 
         Put("S.Accent", accent);
         Put("S.OnAccent", Luma(accent) > 150 ? Colors.Black : Colors.White);
+        // "Beta version": giallo sui temi scuri, ambra scura (leggibile) su quelli chiari.
+        BetaText.Foreground = new SolidColorBrush(_dark ? Color.FromRgb(0xFF, 0xD4, 0x3B) : Color.FromRgb(0x9A, 0x6A, 0x00));
     }
 
     /// <summary>Barra del titolo dello stesso colore della finestra (Windows 11), scura o chiara come il tema della barra.</summary>
@@ -216,6 +219,7 @@ public partial class SettingsWindow : Window
     private void BuildAppearance()
     {
         PageTitle("Appearance");
+        TaskbarGapNotice();
 
         if (BackdropHelper.UsesCompositionBlur(T.Backdrop) && !BackdropHelper.SystemTransparencyEnabled)
             InfoBar("Blur is turned off in Windows",
@@ -531,6 +535,7 @@ public partial class SettingsWindow : Window
     private void BuildBehavior()
     {
         PageTitle("Behavior");
+        TaskbarGapNotice();
 
         var pos = Section("Position");
         Row(pos, "Screen edge", null, ComboCtl(new[]
@@ -1380,7 +1385,49 @@ public partial class SettingsWindow : Window
     private static FrameworkElement Gap(double width) => new Border { Width = width };
 
     /// <summary>Avviso informativo in cima alla pagina, con un'azione.</summary>
-    private void InfoBar(string title, string message, string actionText, Action action)
+    // ---- Taskbar di Windows su un altro lato -----------------------------------------------------------
+
+    private int _shownGapEdge = -1;
+
+    private static string EdgeName(int edge) => edge switch { 0 => "left", 1 => "top", 2 => "right", _ => "bottom" };
+
+    private static BarPosition PositionFor(int edge) => edge switch
+    {
+        0 => BarPosition.Left, 1 => BarPosition.Top, 2 => BarPosition.Right, _ => BarPosition.Bottom
+    };
+
+    /// <summary>
+    /// La taskbar di Windows (nascosta) sta su un altro lato e Windows le tiene libera una fascia che le finestre
+    /// massimizzate non possono usare. Un'app non può liberarla: si spiega come rimediare, con i due rimedi a portata.
+    /// </summary>
+    private void TaskbarGapNotice()
+    {
+        int edge = _shownGapEdge = _app.HiddenTaskbarGapEdge();
+        if (edge < 0) return;
+        string windowsSide = EdgeName(edge), barSide = S.Position.ToString().ToLowerInvariant();
+        InfoBar($"Windows is keeping space free on the {windowsSide}",
+            $"The Windows taskbar is set to the {windowsSide} and OpSec Bar is at the {barSide}, so Windows keeps a strip free on the " +
+            $"{windowsSide} and maximized windows stop short of that edge. Put both on the same side: set the Windows taskbar " +
+            $"position to {barSide}, or move OpSec Bar to the {windowsSide}.",
+            "Open taskbar settings", () => Process.Start(new ProcessStartInfo("ms-settings:taskbar") { UseShellExecute = true })?.Dispose(),
+            $"Move OpSec Bar to the {windowsSide}", () =>
+            {
+                S.Position = PositionFor(edge);
+                // Le barre vengono ricreate sul nuovo lato: poi l'avviso sparisce.
+                var later = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+                later.Tick += (_, _) => { later.Stop(); Refresh(); };
+                later.Start();
+            });
+    }
+
+    /// <summary>Tornando alle Impostazioni (es. dopo aver cambiato la posizione della taskbar di Windows) l'avviso si aggiorna.</summary>
+    private void RefreshGapNoticeIfChanged()
+    {
+        if (CurrentPage is not ("Appearance" or "Behavior")) return;
+        if (_app.HiddenTaskbarGapEdge() != _shownGapEdge) Refresh();
+    }
+
+    private void InfoBar(string title, string message, string actionText, Action action, string? secondText = null, Action? second = null)
     {
         var grid = new Grid { Margin = new Thickness(16, 12, 16, 12) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1393,14 +1440,27 @@ public partial class SettingsWindow : Window
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0)
         });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
-        text.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold });
+        text.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         text.Children.Add(new TextBlock { Text = message, FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
-        Button button = Btn(actionText, action);
-        button.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetColumn(button, 2);
-        grid.Children.Add(button);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        buttons.Children.Add(Btn(actionText, action));
+        if (secondText != null && second != null)
+        {
+            // Due pulsanti accanto al testo lo stringerebbero in una colonna: vanno sotto, allineati al testo.
+            Button extra = Btn(secondText, second);
+            extra.Margin = new Thickness(8, 0, 0, 0);
+            buttons.Children.Add(extra);
+            buttons.HorizontalAlignment = HorizontalAlignment.Left;
+            buttons.Margin = new Thickness(0, 10, 0, 0);
+            text.Children.Add(buttons);
+        }
+        else
+        {
+            Grid.SetColumn(buttons, 2);
+            grid.Children.Add(buttons);
+        }
 
         PageHost.Children.Add(new Border
         {

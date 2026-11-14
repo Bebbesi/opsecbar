@@ -938,6 +938,21 @@ public partial class TaskbarWindow : AppBarWindow
     /// <summary>In auto-hide: mostra la barra per un momento (es. quando il menu Start si apre da tastiera).</summary>
     public void Peek() => PeekDuringAutoHide(1500);
 
+    /// <summary>
+    /// Lato su cui la taskbar di Windows nascosta tiene libera una fascia di questo schermo (diverso dal lato della barra,
+    /// dove la barra la copre); -1 se non c'è. In auto-hide la barra non riserva spazio e non si segnala nulla.
+    /// </summary>
+    public int HiddenTaskbarGapEdge()
+    {
+        if (!CoversHiddenTaskbar) return -1;
+        var bounds = new Native.RECT
+        {
+            Left = (int)Screen.Bounds.Left, Top = (int)Screen.Bounds.Top,
+            Right = (int)Screen.Bounds.Right, Bottom = (int)Screen.Bounds.Bottom
+        };
+        return TaskbarGuard.HiddenTaskbarGapEdge(bounds, (int)AppBarEdge);
+    }
+
     private void Start_RightUp(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
