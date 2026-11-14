@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
+using System.Net.Http;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using ManagedShell.WindowsTray;
 using Microsoft.Win32;
 using OpSecBar.Core;
@@ -33,7 +37,7 @@ public partial class SettingsWindow : Window
         ("Appearance", ""), ("Themes", ""), ("Behavior", ""), ("Taskbar items", ""),
         ("Layout", "\uE90E"),
         ("Pinned apps", ""), ("System tray", ""), ("Start menu", ""), ("Widgets", "\uE823"), ("GIFs", "\uE8B9"),
-        ("System", "")
+        ("System", ""), ("About", "")
     };
 
     public SettingsWindow(App app)
@@ -195,6 +199,7 @@ public partial class SettingsWindow : Window
                 case "Widgets": BuildWidgets(); break;
                 case "GIFs": BuildGifs(); break;
                 case "System": BuildSystem(); break;
+                case "About": BuildAbout(); break;
             }
         }
         catch (Exception ex) { Log.Error("Costruzione pagina impostazioni", ex); }
@@ -1297,13 +1302,214 @@ public partial class SettingsWindow : Window
                 Btn("Uninstall…", _app.Uninstall));
         }
 
-        var about = Section("About");
-        Row(about, "Version", null, new TextBlock
+    }
+
+    // =============================================================================================
+    //  About
+    // =============================================================================================
+
+    private static readonly (string Name, string User)[] Authors = { ("Bebbesi", "Bebbesi"), ("ritzthm", "ritzthm") };
+    private const string RepoUrl = "https://github.com/" + UpdateService.Repository;
+
+    // Calcolati una volta per sessione: l'impronta dell'eseguibile non cambia, le foto profilo si scaricano una volta.
+    private static Task<string?>? _exeHash;
+    private static readonly Dictionary<string, Task<ImageSource?>> Avatars = new();
+    private static readonly HttpClient AvatarHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    private static Task<string?> ExeHash() => _exeHash ??= Task.Run(() =>
+    {
+        try
         {
-            Text = u.CurrentLabel, Foreground = (Brush)FindResource("S.Text2")
+            // L'exe è solo il launcher di .NET: il codice dell'app è in OpSecBar.dll.
+            string path = typeof(App).Assembly.Location;
+            if (path.Length == 0) return null;
+            using var file = File.OpenRead(path);
+            return (string?)Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)).ToLowerInvariant();
+        }
+        catch (Exception ex) { Log.Error("Impronta SHA-256", ex); return null; }
+    });
+
+    private static Task<ImageSource?> Avatar(string user)
+    {
+        lock (Avatars)
+        {
+            if (Avatars.TryGetValue(user, out var cached)) return cached;
+            return Avatars[user] = Task.Run(async () =>
+            {
+                try
+                {
+                    byte[] bytes = await AvatarHttp.GetByteArrayAsync($"https://github.com/{user}.png?size=160");
+                    var image = new BitmapImage();
+                    image.BeginInit();
+                    image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.DecodePixelWidth = 160;
+                    image.StreamSource = new MemoryStream(bytes);
+                    image.EndInit();
+                    image.Freeze();
+                    return (ImageSource?)image;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Foto profilo " + user, ex);
+                    lock (Avatars) Avatars.Remove(user); // alla prossima apertura si riprova
+                    return null;
+                }
+            });
+        }
+    }
+
+    /// <summary>Commit da cui è stata compilata l'app: l'SDK lo aggiunge all'InformationalVersion dopo il "+".</summary>
+    private static string? BuildCommit()
+    {
+        string? info = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        int plus = info?.IndexOf('+') ?? -1;
+        return plus >= 0 ? info![(plus + 1)..] : null;
+    }
+
+    private static void OpenUrl(string url) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
+
+    private void BuildAbout()
+    {
+        PageTitle("About");
+        UpdateService u = _app.Updates;
+
+        // ---- Intestazione: icona, nome, descrizione, versione ----
+        var hero = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var icon = new Image
+        {
+            Source = LargestIconFrame(), Width = 64, Height = 64,
+            Margin = new Thickness(0, 0, 20, 0), VerticalAlignment = VerticalAlignment.Center
+        };
+        RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
+        hero.Children.Add(icon);
+        var heroText = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(heroText, 1);
+        var name = new StackPanel { Orientation = Orientation.Horizontal };
+        name.Children.Add(new TextBlock { Text = "OpSec Bar", FontFamily = (FontFamily)FindResource("S.Display"), FontSize = 22, FontWeight = FontWeights.SemiBold });
+        if (u.CurrentBuild != null)
+            name.Children.Add(new TextBlock
+            {
+                Text = "Beta version", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = BetaText.Foreground,
+                Margin = new Thickness(10, 4, 0, 0), VerticalAlignment = VerticalAlignment.Center
+            });
+        heroText.Children.Add(name);
+        heroText.Children.Add(new TextBlock
+        {
+            Text = "A customizable alternative taskbar for Windows 10 and 11.", Foreground = (Brush)FindResource("S.Text2"),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0)
         });
-        Row(about, "Data folder", "Settings, themes and the log file.", Btn("Open folder", () =>
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.DataDir}\"") { UseShellExecute = false })));
+        heroText.Children.Add(new TextBlock { Text = "Version " + u.CurrentLabel, FontSize = 12, Foreground = (Brush)FindResource("S.Text3"), Margin = new Thickness(0, 4, 0, 0) });
+        hero.Children.Add(heroText);
+        PageHost.Children.Add(hero);
+
+        // ---- Dettagli della build ----
+        var build = Section("Build");
+        Row(build, "Version", null, Selectable(u.CurrentLabel));
+        if (BuildCommit() is string commit)
+        {
+            string shortSha = commit.Length > 7 ? commit[..7] : commit;
+            var commitCtl = new StackPanel { Orientation = Orientation.Horizontal };
+            commitCtl.Children.Add(Selectable(shortSha, true));
+            commitCtl.Children.Add(IconBtn("", "View this commit on GitHub", () => OpenUrl($"{RepoUrl}/commit/{commit}")));
+            Row(build, "Commit", null, commitCtl);
+        }
+
+        var hashText = Selectable("Calculating…", true);
+        hashText.MaxWidth = 290;
+        hashText.TextWrapping = TextWrapping.Wrap;
+        string? hash = null;
+        var copy = IconBtn("", "Copy", () => { if (hash != null) Clipboard.SetText(hash); }, false);
+        var hashCtl = new StackPanel { Orientation = Orientation.Horizontal };
+        hashCtl.Children.Add(hashText);
+        hashCtl.Children.Add(copy);
+        Row(build, "SHA-256", "Fingerprint of OpSecBar.dll, to check that your copy hasn't been tampered with.", hashCtl);
+        ExeHash().ContinueWith(t => Dispatcher.BeginInvoke(() =>
+        {
+            hash = t.Result;
+            hashText.Text = hash ?? "Unavailable";
+            copy.IsEnabled = hash != null;
+        }));
+
+        Row(build, "Data folder", "Settings, themes and the log file.", Btn("Open folder", () =>
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.DataDir}\"") { UseShellExecute = false })?.Dispose()));
+
+        // ---- Autori ----
+        SectionHeader("Made by");
+        var authors = new UniformGrid { Columns = Authors.Length, Margin = new Thickness(-4, 0, -4, 0) };
+        foreach (var (display, user) in Authors) authors.Children.Add(AuthorCard(display, user));
+        PageHost.Children.Add(authors);
+
+        // ---- Link ----
+        var links = Section("Links");
+        Row(links, "Source code", RepoUrl.Replace("https://", ""), Btn("Open on GitHub", () => OpenUrl(RepoUrl)));
+        Row(links, "Release notes", "What changed in each version.", Btn("Releases", () => OpenUrl(RepoUrl + "/releases")));
+        Row(links, "Report a problem", "Open an issue on GitHub.", Btn("Issues", () => OpenUrl(RepoUrl + "/issues")));
+    }
+
+    /// <summary>BitmapImage su un .ico prende il primo fotogramma (16 px): qui si sceglie il più grande (256 px).</summary>
+    private static ImageSource LargestIconFrame()
+    {
+        var decoder = BitmapDecoder.Create(new Uri("pack://application:,,,/OpSecBar;component/Assets/opsecbar.ico"),
+            BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        return decoder.Frames.OrderByDescending(f => f.PixelWidth).First();
+    }
+
+    private TextBox Selectable(string text, bool mono = false) => new()
+    {
+        Text = text, IsReadOnly = true, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Padding = new Thickness(0),
+        Foreground = (Brush)FindResource("S.Text2"), CaretBrush = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Center,
+        FontFamily = mono ? new FontFamily("Cascadia Mono, Consolas") : FontFamily, FontSize = mono ? 12 : FontSize
+    };
+
+    private FrameworkElement AuthorCard(string display, string user)
+    {
+        string url = "https://github.com/" + user;
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // Foto profilo rotonda; finché non arriva (o senza rete) un cerchio con l'iniziale.
+        var photo = new Grid { Width = 48, Height = 48, Margin = new Thickness(0, 0, 14, 0) };
+        photo.Children.Add(new System.Windows.Shapes.Ellipse { Fill = (Brush)FindResource("S.Control"), Stroke = (Brush)FindResource("S.ControlStroke") });
+        photo.Children.Add(new TextBlock
+        {
+            Text = display[..1].ToUpperInvariant(), FontSize = 20, FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("S.Text2")
+        });
+        var pic = new System.Windows.Shapes.Ellipse { Opacity = 0 };
+        photo.Children.Add(pic);
+        Avatar(user).ContinueWith(t => Dispatcher.BeginInvoke(() =>
+        {
+            if (t.Result == null) return;
+            pic.Fill = new ImageBrush(t.Result) { Stretch = Stretch.UniformToFill };
+            pic.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
+        }));
+        row.Children.Add(photo);
+
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(text, 1);
+        text.Children.Add(new TextBlock { Text = display, FontWeight = FontWeights.SemiBold });
+        text.Children.Add(new TextBlock { Text = "github.com/" + user, FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), TextTrimming = TextTrimming.CharacterEllipsis });
+        row.Children.Add(text);
+
+        var open = IconBtn("", "Open GitHub profile", () => OpenUrl(url));
+        open.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(open, 2);
+        row.Children.Add(open);
+
+        var card = new Border
+        {
+            Background = (Brush)FindResource("S.Card"), BorderBrush = (Brush)FindResource("S.CardStroke"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4), Margin = new Thickness(4, 0, 4, 0), Padding = new Thickness(16, 14, 12, 14), Child = row,
+            Cursor = Cursors.Hand, ToolTip = url
+        };
+        card.MouseEnter += (_, _) => card.Background = (Brush)FindResource("S.SubtleHover");
+        card.MouseLeave += (_, _) => card.Background = (Brush)FindResource("S.Card");
+        card.MouseLeftButtonUp += (_, _) => Safe(() => OpenUrl(url));
+        return card;
     }
 
     // =============================================================================================
