@@ -1,11 +1,9 @@
-<Window x:Class="OpSecBar.Windows.StartMenuWindow"
+<local:FlyoutWindow x:Class="OpSecBar.Windows.StartMenuWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="OpSec Bar Start" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" WindowStartupLocation="Manual"
-        FontFamily="{DynamicResource BarFont}" FontSize="13" Foreground="{DynamicResource PanelFgBrush}"
-        Deactivated="Window_Deactivated" PreviewKeyDown="Window_PreviewKeyDown" SnapsToDevicePixels="True">
-    <Window.Resources>
+        xmlns:local="clr-namespace:OpSecBar.Windows"
+        Title="OpSec Bar Start">
+    <local:FlyoutWindow.Resources>
         <!-- Riga dell'elenco "All apps" -->
         <DataTemplate x:Key="AppRowTemplate">
             <StackPanel Orientation="Horizontal" Height="36">
@@ -59,7 +57,7 @@
                 </StackPanel>
             </Button>
         </DataTemplate>
-    </Window.Resources>
+    </local:FlyoutWindow.Resources>
 
     <Grid x:Name="RootGrid" Margin="14">
 
@@ -147,4 +145,4 @@
             </Border>
         </Grid>
     </Grid>
-</Window>
+</local:FlyoutWindow>

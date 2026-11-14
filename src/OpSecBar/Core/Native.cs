@@ -24,6 +24,12 @@ internal static class Native
     public static string? PackagedAppId(IntPtr hWnd)
     {
         GetWindowThreadProcessId(hWnd, out uint pid);
+        return PackagedAppIdForProcess(pid);
+    }
+
+    /// <summary>AUMID del processo, se è un'app in pacchetto (MSIX); altrimenti null.</summary>
+    public static string? PackagedAppIdForProcess(uint pid)
+    {
         if (pid == 0) return null;
         IntPtr process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
         if (process == IntPtr.Zero) return null;
@@ -32,6 +38,24 @@ internal static class Native
             uint length = 512;
             var id = new System.Text.StringBuilder((int)length);
             return GetApplicationUserModelId(process, ref length, id) == 0 && id.Length > 0 ? id.ToString() : null;
+        }
+        finally { CloseHandle(process); }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder path, ref int size);
+
+    /// <summary>Percorso completo dell'eseguibile del processo (funziona anche con processi elevati); null se non leggibile.</summary>
+    public static string? ProcessImagePath(uint pid)
+    {
+        if (pid == 0) return null;
+        IntPtr process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            int size = 1024;
+            var path = new System.Text.StringBuilder(size);
+            return QueryFullProcessImageName(process, 0, path, ref size) ? path.ToString() : null;
         }
         finally { CloseHandle(process); }
     }

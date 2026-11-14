@@ -4,8 +4,15 @@ using OpSecBar.Core;
 
 namespace OpSecBar.Services;
 
+/// <summary>Un'app che ha una sessione audio sul dispositivo predefinito, come la mostra il mixer di Windows.</summary>
+/// <param name="Key">Identifica l'app (percorso dell'eseguibile, o "system" per i suoni di sistema).</param>
+/// <param name="IconKey">Per IconService: AUMID dell'app in pacchetto o percorso dell'eseguibile; null per i suoni di sistema.</param>
+/// <param name="Active">Sta riproducendo adesso.</param>
+public sealed record AppAudioSession(string Key, string Name, string? IconKey, int Volume, bool Muted, bool Active, bool IsSystem);
+
 /// <summary>
-/// Volume di una singola app (il "mixer" di Windows), usato dal player: regola solo l'app che sta riproducendo.
+/// Volume di una singola app (il "mixer" di Windows): il player regola l'app che sta riproducendo, le impostazioni
+/// rapide elencano tutte le app con una sessione audio.
 /// L'app della sessione multimediale (AUMID come "Spotify.exe", "MSEdge" o "SpotifyAB.SpotifyMusic_xxx!Spotify")
 /// viene associata alle sessioni audio del dispositivo predefinito tramite processo o percorso dell'eseguibile.
 /// </summary>
@@ -41,11 +48,115 @@ public static class AppVolumeService
         v.SetMute(mute, ref ctx);
     });
 
+    // ---- Mixer: tutte le app ----------------------------------------------------------------------
+
+    public const string SystemKey = "system";
+
+    /// <summary>
+    /// Le app con una sessione audio sul dispositivo predefinito: suoni di sistema per primi, poi in ordine di nome.
+    /// Le sessioni dello stesso eseguibile (i browser ne aprono più d'una) diventano una sola voce.
+    /// </summary>
+    public static List<AppAudioSession> ListSessions()
+    {
+        var apps = new Dictionary<string, AppAudioSession>(StringComparer.OrdinalIgnoreCase);
+        ForEachDefaultSession((control, volume) =>
+        {
+            if (control.GetState(out int state) != 0 || state == 2 /* AudioSessionStateExpired */) return;
+            if (SessionKey(control, out uint pid) is not { } key) return;
+            if (volume.GetMasterVolume(out float level) != 0 || volume.GetMute(out bool muted) != 0) return;
+            bool active = state == 1;
+
+            if (apps.TryGetValue(key, out AppAudioSession? seen))
+            {
+                // Più sessioni della stessa app: vale quella che sta suonando.
+                if (active && !seen.Active) apps[key] = seen with { Volume = (int)Math.Round(level * 100), Muted = muted, Active = true };
+                return;
+            }
+
+            bool system = key == SystemKey;
+            string? aumid = system ? null : Native.PackagedAppIdForProcess(pid);
+            apps[key] = new AppAudioSession(key, system ? "System sounds" : AppName(control, key),
+                system ? null : aumid != null ? "shell:AppsFolder\\" + aumid : key,
+                (int)Math.Round(level * 100), muted, active, system);
+        });
+        return apps.Values.OrderByDescending(a => a.IsSystem).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    public static bool SetSessionVolume(string key, int percent)
+    {
+        float level = Math.Clamp(percent, 0, 100) / 100f;
+        return ForEachSessionOf(key, v =>
+        {
+            Guid ctx = Guid.Empty;
+            v.SetMasterVolume(level, ref ctx);
+            if (percent > 0) v.SetMute(false, ref ctx);
+        });
+    }
+
+    public static bool SetSessionMute(string key, bool mute) => ForEachSessionOf(key, v =>
+    {
+        Guid ctx = Guid.Empty;
+        v.SetMute(mute, ref ctx);
+    });
+
+    private static bool ForEachSessionOf(string key, Action<ISimpleAudioVolume> action)
+    {
+        bool found = false;
+        ForEachDefaultSession((control, volume) =>
+        {
+            if (!string.Equals(SessionKey(control, out _), key, StringComparison.OrdinalIgnoreCase)) return;
+            action(volume);
+            found = true;
+        });
+        return found;
+    }
+
+    /// <summary>Percorso dell'eseguibile della sessione, "system" per i suoni di sistema; null se il processo non c'è più.</summary>
+    private static string? SessionKey(IAudioSessionControl2 control, out uint pid)
+    {
+        pid = 0;
+        if (control.IsSystemSoundsSession() == 0 /* S_OK = sì */) return SystemKey;
+        if (control.GetProcessId(out pid) != 0 || pid == 0) return null;
+        return Native.ProcessImagePath(pid);
+    }
+
+    /// <summary>Il nome che l'app dà alla propria sessione; altrimenti la descrizione dell'eseguibile (es. "Google Chrome").</summary>
+    private static string AppName(IAudioSessionControl2 control, string path)
+    {
+        try
+        {
+            if (control.GetDisplayName(out string? display) == 0 && !string.IsNullOrWhiteSpace(display) && !display.StartsWith('@'))
+                return display;
+        }
+        catch { }
+        try
+        {
+            string? description = FileVersionInfo.GetVersionInfo(path).FileDescription;
+            if (!string.IsNullOrWhiteSpace(description)) return description.Trim();
+        }
+        catch { }
+        return System.IO.Path.GetFileNameWithoutExtension(path);
+    }
+
+    // ---- Sessioni ----------------------------------------------------------------------------------
+
     /// <summary>Applica l'azione a tutte le sessioni audio dell'app (i browser ne hanno spesso più d'una).</summary>
     private static bool ForEachSession(string appId, Action<ISimpleAudioVolume> action)
     {
         if (string.IsNullOrWhiteSpace(appId)) return false;
         bool found = false;
+        ForEachDefaultSession((control, volume) =>
+        {
+            if (!Matches(control, appId)) return;
+            action(volume);
+            found = true;
+        });
+        return found;
+    }
+
+    /// <summary>Visita le sessioni audio del dispositivo di riproduzione predefinito.</summary>
+    private static void ForEachDefaultSession(Action<IAudioSessionControl2, ISimpleAudioVolume> visit)
+    {
         IMMDeviceEnumerator? enumerator = null;
         IMMDevice? device = null;
         IAudioSessionManager2? manager = null;
@@ -53,24 +164,19 @@ public static class AppVolumeService
         try
         {
             enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
-            if (enumerator.GetDefaultAudioEndpoint(0, 1, out device) != 0 || device == null) return false;
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out device) != 0 || device == null) return;
             Guid iid = typeof(IAudioSessionManager2).GUID;
-            if (device.Activate(ref iid, 0x17, IntPtr.Zero, out object? o) != 0) return false;
+            if (device.Activate(ref iid, 0x17, IntPtr.Zero, out object? o) != 0) return;
             manager = o as IAudioSessionManager2;
-            if (manager == null || manager.GetSessionEnumerator(out sessions) != 0 || sessions == null) return false;
-            if (sessions.GetCount(out int count) != 0) return false;
+            if (manager == null || manager.GetSessionEnumerator(out sessions) != 0 || sessions == null) return;
+            if (sessions.GetCount(out int count) != 0) return;
 
             for (int i = 0; i < count; i++)
             {
                 if (sessions.GetSession(i, out IAudioSessionControl2? control) != 0 || control == null) continue;
                 try
                 {
-                    if (!Matches(control, appId)) continue;
-                    if (control is ISimpleAudioVolume volume)
-                    {
-                        action(volume);
-                        found = true;
-                    }
+                    if (control is ISimpleAudioVolume volume) visit(control, volume);
                 }
                 catch (Exception ex) { Log.Warn("Sessione audio: " + ex.Message); }
                 finally { Marshal.ReleaseComObject(control); }
@@ -82,7 +188,6 @@ public static class AppVolumeService
             foreach (object? com in new object?[] { sessions, manager, device, enumerator })
                 if (com != null) try { Marshal.ReleaseComObject(com); } catch { }
         }
-        return found;
     }
 
     private static bool Matches(IAudioSessionControl2 control, string appId)

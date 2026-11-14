@@ -565,11 +565,15 @@ public partial class SettingsWindow : Window
         Row(clock, "Date", null, Toggle(S.ShowDate, v => S.ShowDate = v));
         Row(clock, "Seconds", null, Toggle(S.ShowSeconds, v => S.ShowSeconds = v));
         Row(clock, "24-hour clock", null, Toggle(S.Clock24h, v => S.Clock24h = v));
+        Row(clock, "OpSec Bar calendar", "Clicking the clock opens OpSec Bar's own calendar. Off: the Windows notifications and calendar panel.",
+            Toggle(S.CustomCalendar, v => S.CustomCalendar = v));
 
         var other = Section("Corner");
         Row(other, "System tray", "Icons of apps running in the background.", Toggle(S.ShowTray, v => S.ShowTray = v));
         Row(other, "Volume", "Style it in Widgets.", Toggle(S.ShowVolume, v => S.ShowVolume = v));
-        Row(other, "Quick settings button", "Opens Windows quick settings for Wi‑Fi, sound and brightness.", Toggle(S.ShowQuickSettings, v => S.ShowQuickSettings = v));
+        Row(other, "Quick settings button", "Wi‑Fi, Bluetooth, sound and more.", Toggle(S.ShowQuickSettings, v => S.ShowQuickSettings = v));
+        Row(other, "OpSec Bar quick settings", "The button opens OpSec Bar's own panel. Off: the Windows quick settings.",
+            Toggle(S.CustomQuickSettings, v => S.CustomQuickSettings = v));
         Row(other, "Start button", null, Toggle(S.ShowStartButton, v => S.ShowStartButton = v));
         Row(other, "System monitor", "CPU, memory and battery.", Toggle(S.ShowSysInfo, v => S.ShowSysInfo = v));
     }

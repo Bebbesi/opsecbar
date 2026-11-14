@@ -103,7 +103,7 @@ Click it to expand it with a progress bar.
 ### Right: system
 - Clock with date (custom formats, colors and fonts) and a volume widget: click for a slider, scroll to change it, right-click to mute.
 - Real system tray: visible icons plus a panel for hidden icons; left and right clicks are forwarded to the apps. Drag an icon out of the hidden panel onto the bar to keep it visible, along the bar to reorder it, or off the bar to hide it again.
-- Windows quick settings and the Start button.
+- Quick settings and the Start button.
 - Optional: CPU / RAM / battery.
 
 ### Start menu
@@ -111,6 +111,19 @@ Search, favorites, your apps, and lock / sign out / sleep / restart / shut down.
 your Start Menu `Programs` folder (including Steam games); **Settings → Start menu → App list** switches it to all
 installed apps (Win32 and Store).
 It opens from the Start button **and from the Windows key**; other shortcuts (Win+E, Win+D, Win+L…) stay with Windows.
+
+### Calendar and quick settings
+Both are OpSec Bar's own panels, themed like the Start menu.
+- **Calendar** (click the clock): the time and date, a month view you can browse with the arrows, the mouse wheel or the
+  arrow keys, and a button for the Windows notification panel.
+- **Quick settings**: Wi-Fi and Bluetooth on/off, airplane mode, accessibility tools, energy saver, live captions,
+  the volume and the sound output device. The arrow next to Wi-Fi lists the networks around you: connect (typing the
+  password when needed) or disconnect right there. The arrow next to Bluetooth lists your devices and the ones nearby:
+  pair new devices (including PIN confirmation), connect or disconnect headphones and speakers, or remove a device. The arrow next to the volume slider opens the volume mixer: a slider and mute button for every app playing
+  sound, plus the list of output devices (right-click the arrow for a quick device menu).
+
+Right-click the clock or the quick settings button for the Windows panels. To always use the Windows ones, turn off
+**OpSec Bar calendar** / **OpSec Bar quick settings** in **Settings → Taskbar items**.
 
 ### Settings
 | Page | Options |
@@ -183,7 +196,13 @@ On first launch, settings from the previous version (`%AppData%\NovaBar`) are im
 
 - **Blur / Acrylic / Glass** require Windows *Transparency effects* (Settings → Personalization → Colors).
   If they are off, OpSecBar falls back to plain transparency without blur and says so on the *Appearance* page.
-- **Quick settings** and the **notification center** are the Windows ones and open in their usual place.
+- The **notification center** is the Windows one: open it from the calendar or by right-clicking the clock.
+- Quick settings has no brightness, night light or cast controls: those are in the Windows quick settings
+  (right-click the quick settings button). Energy saver opens its Windows settings page instead of switching directly.
+- Listing Wi-Fi networks needs Windows *location access* for apps; if it's off, the Wi-Fi page says so and links to
+  the setting. Work or school (802.1X) networks are connected from the Windows panel.
+- Bluetooth devices that aren't headphones or speakers (mice, keyboards, controllers) can't be connected on demand:
+  they connect by themselves when switched on and in range.
 - The tray shows the icons Windows exposes as classic notification icons. If network or battery do not appear
   (it depends on your Windows 11 version), reach them from the quick settings button.
 - Tray icons are drawn by the individual apps: on a light bar, white icons can be hard to see.
@@ -216,8 +235,13 @@ src/OpSecBar/
     IconService            high-resolution icons from the shell
     BackdropHelper/Window  blur and acrylic, including rounded corners
     WinKeyHook             Windows key -> OpSecBar Start menu
+    AudioService           volume, mute, sound output device
+    RadioService           Wi-Fi, Bluetooth, airplane mode on/off
+    WifiService            Wi-Fi networks: scan, connect, disconnect
+    BluetoothService       Bluetooth devices: list, pair, remove (audio connect lives in AudioService)
     AutoStartService, SystemInfoService
-  Windows/                 TaskbarWindow, StartMenuWindow, SettingsWindow
+  Windows/                 TaskbarWindow, SettingsWindow, and the panels built on FlyoutWindow:
+                           StartMenuWindow, CalendarWindow, QuickSettingsWindow
   Controls/                MediaWidget, TrayArea
   Themes/Controls.xaml     shared styles (buttons, menus, tooltips, sliders)
 ```

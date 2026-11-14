@@ -468,6 +468,9 @@ public static class ThemeService
         res["PressedBrush"] = Brush(WithAlpha(fg, 0.20));
         res["AccentBrush"] = Brush(accent);
         res["AccentDimBrush"] = Brush(WithAlpha(accent, 0.28));
+        // Testo e glifi sopra una superficie in colore d'accento (giorno di oggi nel calendario, tessere attive).
+        bool accentIsDark = (0.299 * accent.R + 0.587 * accent.G + 0.114 * accent.B) < 150;
+        res["AccentFgBrush"] = Brush(accentIsDark ? Colors.White : Color.FromRgb(0x10, 0x11, 0x14));
 
         res["PanelBrush"] = Brush(WithAlpha(panel, panelAlpha));
         res["PanelSolidBrush"] = Brush(panel);

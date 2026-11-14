@@ -115,7 +115,7 @@
                 </Button>
 
                 <Button x:Name="ClockButton" Style="{StaticResource BarButton}" Click="Clock_Click"
-                        ToolTip="Notifications and calendar">
+                        MouseRightButtonUp="Clock_RightUp" ToolTip="Calendar">
                     <StackPanel x:Name="ClockPanel" Orientation="Horizontal">
                         <TextBlock x:Name="ClockDate" Foreground="{DynamicResource FgDimBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
                         <TextBlock x:Name="ClockTime" FontWeight="SemiBold" VerticalAlignment="Center" TextAlignment="Center" />
@@ -125,7 +125,7 @@
                 <c:TrayArea x:Name="Tray" />
 
                 <Button x:Name="QuickButton" Style="{StaticResource BarButton}" Padding="7,0" Click="Quick_Click"
-                        ToolTip="Quick settings">
+                        MouseRightButtonUp="Quick_RightUp" ToolTip="Quick settings">
                     <TextBlock Style="{StaticResource Glyph}" Text="&#xE9E9;" FontSize="14" Foreground="{DynamicResource IconBrush}" />
                 </Button>
 

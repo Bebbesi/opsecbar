@@ -52,6 +52,8 @@ public partial class App : Application
 
     private readonly List<TaskbarWindow> _bars = new();
     private StartMenuWindow? _startMenu;
+    private CalendarWindow? _calendar;
+    private QuickSettingsWindow? _quickSettings;
     private SettingsWindow? _settingsWindow;
     private Mutex? _mutex;
     private EventWaitHandle? _exitEvent, _showSettingsEvent;
@@ -133,6 +135,7 @@ public partial class App : Application
             ApplyWinKey();
             SeedDefaultsOnFirstRun();
             _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
+            if (Settings.ShowQuickSettings && Settings.CustomQuickSettings) QuickSettingsWindow.Preload();
 
             if (e.Args.Contains("--settings")) ShowSettings();
             if (e.Args.Contains("--updated")) Log.Info($"Aggiornato alla versione {Updates.CurrentLabel}");
@@ -199,7 +202,7 @@ public partial class App : Application
 
     private void CloseTaskbars()
     {
-        _startMenu?.HideMenu();
+        HideFlyouts();
         foreach (TaskbarWindow bar in _bars.ToList())
         {
             try
@@ -279,7 +282,7 @@ public partial class App : Application
             {
                 ThemeService.ApplyResources(Settings.Theme);
                 foreach (var bar in _bars) bar.ApplyTheme();
-                _startMenu?.ApplyTheme();
+                foreach (FlyoutWindow flyout in Flyouts) flyout.ApplyTheme();
                 return;
             }
 
@@ -316,6 +319,8 @@ public partial class App : Application
                     break;
                 case nameof(AppSettings.AutoUpdate):
                 case nameof(AppSettings.ShowWindowPreviews): // letto al passaggio del mouse
+                case nameof(AppSettings.CustomCalendar):     // letti al click su orologio e impostazioni rapide
+                case nameof(AppSettings.CustomQuickSettings):
                 case nameof(AppSettings.RecentColors):
                 case nameof(AppSettings.PinnedTrayIcons):
                     break; // solo da salvare
@@ -349,7 +354,7 @@ public partial class App : Application
     /// <summary>Apre le Impostazioni, facoltativamente su una pagina precisa (es. "GIFs").</summary>
     public void ShowSettings(string? page)
     {
-        _startMenu?.HideMenu();
+        HideFlyouts();
         if (_settingsWindow == null)
         {
             _settingsWindow = new SettingsWindow(this);
@@ -376,7 +381,32 @@ public partial class App : Application
         _startMenu.Toggle(bar, anchor);
     }
 
+    /// <summary>Calendario di OpSec Bar (si apre dall'orologio).</summary>
+    public void ToggleCalendar(TaskbarWindow bar, FrameworkElement anchor)
+    {
+        _calendar ??= new CalendarWindow(this);
+        _calendar.Toggle(bar, anchor);
+    }
+
+    /// <summary>Impostazioni rapide di OpSec Bar: rete, Bluetooth, volume.</summary>
+    public void ToggleQuickSettings(TaskbarWindow bar, FrameworkElement anchor)
+    {
+        _quickSettings ??= new QuickSettingsWindow(this);
+        _quickSettings.Toggle(bar, anchor);
+    }
+
     public bool IsStartMenuOpen => _startMenu?.IsVisible == true;
+
+    /// <summary>I pannelli già creati (menu Start, calendario, impostazioni rapide).</summary>
+    private IEnumerable<FlyoutWindow> Flyouts => new FlyoutWindow?[] { _startMenu, _calendar, _quickSettings }.OfType<FlyoutWindow>();
+
+    /// <summary>True se uno dei pannelli è aperto: la barra non si nasconde finché resta aperto.</summary>
+    public bool IsFlyoutOpen => Flyouts.Any(f => f.IsVisible);
+
+    private void HideFlyouts()
+    {
+        foreach (FlyoutWindow flyout in Flyouts) flyout.HideFlyout();
+    }
 
     /// <summary>Installa o rimuove l'intercettazione del tasto Windows in base alle impostazioni.</summary>
     private void ApplyWinKey()
@@ -494,7 +524,10 @@ public partial class App : Application
         try { _winKey?.Dispose(); } catch { }
         try { Native.UnregisterHotKey(IntPtr.Zero, EmergencyHotkeyId); } catch { }
         try { _settingsWindow?.Close(); } catch { }
-        try { _startMenu?.ForceClose(); } catch { }
+        foreach (FlyoutWindow flyout in Flyouts.ToList())
+        {
+            try { flyout.ForceClose(); } catch { }
+        }
         try { Media?.Stop(); } catch { }
         try { Shell?.AppBarManager.SignalGracefulShutdown(); } catch { }
         try { CloseTaskbars(); } catch { }

@@ -9,6 +9,13 @@ public static class Ui
 {
     public static FontFamily GlyphFont => (FontFamily)Application.Current.Resources["GlyphFont"];
 
+    /// <summary>Testo secondario di un pannello: segue il colore attenuato anche quando il tema cambia.</summary>
+    public static TextBlock Dim(this TextBlock text)
+    {
+        text.SetResourceReference(TextBlock.ForegroundProperty, "PanelFgDimBrush");
+        return text;
+    }
+
     /// <summary>Voce di menu con icona (glifo Segoe Fluent/MDL2) e azione protetta da eccezioni.</summary>
     public static MenuItem MenuEntry(string text, string glyph, Action action)
     {

@@ -584,7 +584,7 @@ public partial class TaskbarWindow : AppBarWindow
     }
 
     protected override bool ShouldAllowAutoHide() =>
-        base.ShouldAllowAutoHide() && _openPopups == 0 && !_app.IsStartMenuOpen;
+        base.ShouldAllowAutoHide() && _openPopups == 0 && !_app.IsFlyoutOpen;
 
     protected override void OnAutoHideAnimationBegin(bool isHiding)
     {
@@ -867,12 +867,52 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void Clock_Click(object sender, RoutedEventArgs e)
     {
-        try { ShellHelper.ShowNotificationCenter(); } catch (Exception ex) { Log.Error("ShowNotificationCenter", ex); }
+        if (_s.CustomCalendar) _app.ToggleCalendar(this, ClockButton);
+        else ShowWindowsNotifications();
     }
 
     private void Quick_Click(object sender, RoutedEventArgs e)
     {
+        if (_s.CustomQuickSettings) _app.ToggleQuickSettings(this, QuickButton);
+        else ShowWindowsQuickSettings();
+    }
+
+    /// <summary>Il pannello di Windows con notifiche e calendario.</summary>
+    public static void ShowWindowsNotifications()
+    {
+        try { ShellHelper.ShowNotificationCenter(); } catch (Exception ex) { Log.Error("ShowNotificationCenter", ex); }
+    }
+
+    /// <summary>Le impostazioni rapide di Windows.</summary>
+    public static void ShowWindowsQuickSettings()
+    {
         try { ShellHelper.ShowActionCenter(); } catch (Exception ex) { Log.Error("ShowActionCenter", ex); }
+    }
+
+    private void Clock_RightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var menu = new ContextMenu();
+        menu.Items.Add(MenuEntry("Notifications", "", ShowWindowsNotifications));
+        menu.Items.Add(MenuEntry("Date and time settings", "", () => OpenUri("ms-settings:dateandtime")));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuEntry("Clock settings…", "", () => _app.ShowSettings("Widgets")));
+        OpenMenu(menu, ClockButton);
+    }
+
+    private void Quick_RightUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        var menu = new ContextMenu();
+        menu.Items.Add(MenuEntry("Windows quick settings", "", ShowWindowsQuickSettings));
+        menu.Items.Add(MenuEntry("Windows Settings", "", () => OpenUri("ms-settings:")));
+        OpenMenu(menu, QuickButton);
+    }
+
+    private static void OpenUri(string uri)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) { Log.Error("Apertura di " + uri, ex); }
     }
 
     private void Start_Click(object sender, RoutedEventArgs e) => _app.ToggleStartMenu(this, StartButton);

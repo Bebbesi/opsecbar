@@ -216,6 +216,7 @@ public class AppSettings : ObservableObject
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _useWinKey = true;
     private StartAppSource _startAppSource = StartAppSource.StartMenuFolder;
+    private bool _customCalendar = true, _customQuickSettings = true;
     private string _clockFormat = "", _dateFormat = "";
     private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
     private double _gifSize;
@@ -284,6 +285,12 @@ public class AppSettings : ObservableObject
     public StartAppSource StartAppSource { get => _startAppSource; set => Set(ref _startAppSource, value); }
     /// <summary>Il tasto Windows apre il menu Start di OpSecBar invece di quello di Windows.</summary>
     public bool UseWinKey { get => _useWinKey; set => Set(ref _useWinKey, value); }
+
+    // Pannelli
+    /// <summary>Il click sull'orologio apre il calendario di OpSec Bar invece del pannello notifiche/calendario di Windows.</summary>
+    public bool CustomCalendar { get => _customCalendar; set => Set(ref _customCalendar, value); }
+    /// <summary>Il pulsante delle impostazioni rapide apre il pannello di OpSec Bar invece di quello di Windows.</summary>
+    public bool CustomQuickSettings { get => _customQuickSettings; set => Set(ref _customQuickSettings, value); }
 
     // Elenchi (salvati esplicitamente quando cambiano)
     public List<PinnedApp> PinnedApps { get; set; } = new();
