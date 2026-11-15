@@ -13,7 +13,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root "dist\OpSecBar"
 $target = Join-Path $env:LOCALAPPDATA "Programs\OpSecBar"
 $exe = Join-Path $target "OpSecBar.exe"
-$shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "OpSec Bar.lnk"
+$shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Open TaskBar.lnk"
 
 function Stop-OpSecBar {
     $running = Get-Process OpSecBar -ErrorAction SilentlyContinue
@@ -25,6 +25,8 @@ function Stop-OpSecBar {
 }
 
 Stop-OpSecBar
+# Il collegamento con il vecchio nome dell'app (OpSec Bar) non serve più.
+Remove-Item (Join-Path ([Environment]::GetFolderPath("Programs")) "OpSec Bar.lnk") -ErrorAction SilentlyContinue
 
 if ($Uninstall) {
     Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OpSecBar" -ErrorAction SilentlyContinue
@@ -43,7 +45,7 @@ $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($shortcut)
 $link.TargetPath = $exe
 $link.WorkingDirectory = $target
-$link.Description = "OpSec Bar - alternative taskbar for Windows"
+$link.Description = "Open TaskBar - alternative taskbar for Windows"
 $link.Save()
 
 Start-Process $exe

@@ -1,5 +1,5 @@
 @echo off
-rem Emergency: closes OpSec Bar and makes the original Windows taskbar visible again.
+rem Emergency: closes Open TaskBar and makes the original Windows taskbar visible again.
 rem (Keyboard alternative: Ctrl + Alt + Shift + Q)
 setlocal
 set "EXE=%LOCALAPPDATA%\Programs\OpSecBar\OpSecBar.exe"

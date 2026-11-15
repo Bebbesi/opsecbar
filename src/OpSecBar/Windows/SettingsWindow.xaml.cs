@@ -511,12 +511,12 @@ public partial class SettingsWindow : Window
 
     private void ImportTheme()
     {
-        var dialog = new OpenFileDialog { Title = "Import theme", Filter = "OpSec Bar theme (*.json)|*.json" };
+        var dialog = new OpenFileDialog { Title = "Import theme", Filter = "Open TaskBar theme (*.json)|*.json" };
         if (dialog.ShowDialog(this) != true) return;
         ThemeData? theme = ThemeService.ReadThemeFile(dialog.FileName);
         if (theme == null)
         {
-            MessageBox.Show(this, "This file is not a valid OpSec Bar theme.", AppInfo.Name, MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, "This file is not a valid Open TaskBar theme.", AppInfo.Name, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (ThemeService.IsPreset(theme.Name) || theme.Name == ThemeService.CustomName) theme.Name += " (imported)";
@@ -527,7 +527,7 @@ public partial class SettingsWindow : Window
 
     private void ExportTheme(ThemeData theme)
     {
-        var dialog = new SaveFileDialog { Title = "Export theme", Filter = "OpSec Bar theme (*.json)|*.json", FileName = theme.Name + ".json" };
+        var dialog = new SaveFileDialog { Title = "Export theme", Filter = "Open TaskBar theme (*.json)|*.json", FileName = theme.Name + ".json" };
         if (dialog.ShowDialog(this) != true) return;
         try { ThemeService.WriteThemeFile(theme, dialog.FileName); }
         catch (Exception ex)
@@ -577,14 +577,14 @@ public partial class SettingsWindow : Window
         Row(clock, "Date", null, Toggle(S.ShowDate, v => S.ShowDate = v));
         Row(clock, "Seconds", null, Toggle(S.ShowSeconds, v => S.ShowSeconds = v));
         Row(clock, "24-hour clock", null, Toggle(S.Clock24h, v => S.Clock24h = v));
-        Row(clock, "OpSec Bar calendar", "Clicking the clock opens OpSec Bar's own calendar. Off: the Windows notifications and calendar panel.",
+        Row(clock, "Open TaskBar calendar", "Clicking the clock opens Open TaskBar's own calendar. Off: the Windows notifications and calendar panel.",
             Toggle(S.CustomCalendar, v => S.CustomCalendar = v));
 
         var other = Section("Corner");
         Row(other, "System tray", "Icons of apps running in the background.", Toggle(S.ShowTray, v => S.ShowTray = v));
         Row(other, "Volume", "Style it in Widgets.", Toggle(S.ShowVolume, v => S.ShowVolume = v));
         Row(other, "Quick settings button", "Wi‑Fi, Bluetooth, sound and more.", Toggle(S.ShowQuickSettings, v => S.ShowQuickSettings = v));
-        Row(other, "OpSec Bar quick settings", "The button opens OpSec Bar's own panel. Off: the Windows quick settings.",
+        Row(other, "Open TaskBar quick settings", "The button opens Open TaskBar's own panel. Off: the Windows quick settings.",
             Toggle(S.CustomQuickSettings, v => S.CustomQuickSettings = v));
         Row(other, "Start button", null, Toggle(S.ShowStartButton, v => S.ShowStartButton = v));
         Row(other, "System monitor", "CPU, memory and battery.", Toggle(S.ShowSysInfo, v => S.ShowSysInfo = v));
@@ -1015,7 +1015,7 @@ public partial class SettingsWindow : Window
         Row(layout, "Width", null, SliderCtl(S.StartMenuWidth, 320, 800, 10, "0 px", v => S.StartMenuWidth = v));
         Row(layout, "Height", null, SliderCtl(S.StartMenuHeight, 380, 1000, 10, "0 px", v => S.StartMenuHeight = v));
         Row(layout, "Show favorites", null, Toggle(S.StartShowFavorites, v => S.StartShowFavorites = v));
-        Row(layout, "Show recent apps", "The last apps you opened from OpSec Bar. Search results also put the apps you opened most in the last 30 days first.",
+        Row(layout, "Show recent apps", "The last apps you opened from Open TaskBar. Search results also put the apps you opened most in the last 30 days first.",
             Toggle(S.StartShowRecent, v => S.StartShowRecent = v));
 
         SectionHeader("Favorites", "Right-click an app in the Start menu to add it here.");
@@ -1264,19 +1264,19 @@ public partial class SettingsWindow : Window
         PageTitle("System");
 
         var startup = Section("Startup");
-        Row(startup, "Start OpSec Bar when I sign in", null, Toggle(S.AutoStart, v => S.AutoStart = v));
+        Row(startup, "Start Open TaskBar when I sign in", null, Toggle(S.AutoStart, v => S.AutoStart = v));
 
         var win = Section("Windows taskbar");
-        Row(win, "Hide the Windows taskbar", "Explorer keeps running. The Windows taskbar comes back when OpSec Bar exits, even after a crash.",
+        Row(win, "Hide the Windows taskbar", "Explorer keeps running. The Windows taskbar comes back when Open TaskBar exits, even after a crash.",
             Toggle(S.HideWindowsTaskbar, v => S.HideWindowsTaskbar = v));
 
         var recovery = Section("Recovery");
-        Row(recovery, "Emergency exit", "Closes OpSec Bar and restores the Windows taskbar from anywhere.", KeyCaps("Ctrl", "Alt", "Shift", "Q"));
-        Row(recovery, "Restart OpSec Bar", null, Btn("Restart", () => _app.ExitApp(true)));
-        Row(recovery, "Exit OpSec Bar", "Restores the Windows taskbar.", Btn("Exit", () => _app.ExitApp()));
+        Row(recovery, "Emergency exit", "Closes Open TaskBar and restores the Windows taskbar from anywhere.", KeyCaps("Ctrl", "Alt", "Shift", "Q"));
+        Row(recovery, "Restart Open TaskBar", null, Btn("Restart", () => _app.ExitApp(true)));
+        Row(recovery, "Exit Open TaskBar", "Restores the Windows taskbar.", Btn("Exit", () => _app.ExitApp()));
 
         var updates = Section("Updates");
-        Row(updates, "Install updates automatically", "Checks the latest GitHub release every time OpSec Bar starts.", Toggle(S.AutoUpdate, v => S.AutoUpdate = v));
+        Row(updates, "Install updates automatically", "Checks the latest GitHub release every time Open TaskBar starts.", Toggle(S.AutoUpdate, v => S.AutoUpdate = v));
         Row(updates, "Get pre-release updates", "Updates to the newest version on GitHub, even if it's a pre-release. Turning this off goes back to the latest release.",
             Toggle(S.PreReleaseUpdates, v => S.PreReleaseUpdates = v));
         UpdateService u = _app.Updates;
@@ -1293,12 +1293,12 @@ public partial class SettingsWindow : Window
             _ => ("Not checked yet.", "Check now", (Action)(() => _app.CheckForUpdates(false)))
         };
         FrameworkElement control = action != null && run != null ? Btn(action, run, u.State is UpdateState.Available or UpdateState.Ready) : Gap(0);
-        Row(updates, "OpSec Bar " + u.CurrentLabel, status, control);
+        Row(updates, "Open TaskBar " + u.CurrentLabel, status, control);
 
         if (App.UninstallerPath != null)
         {
             var remove = Section("Uninstall");
-            Row(remove, "Uninstall OpSec Bar", "Removes the app and brings the Windows taskbar back. You can choose to keep or delete your settings.",
+            Row(remove, "Uninstall Open TaskBar", "Removes the app and brings the Windows taskbar back. You can choose to keep or delete your settings.",
                 Btn("Uninstall…", _app.Uninstall));
         }
 
@@ -1387,7 +1387,7 @@ public partial class SettingsWindow : Window
         var heroText = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(heroText, 1);
         var name = new StackPanel { Orientation = Orientation.Horizontal };
-        name.Children.Add(new TextBlock { Text = "OpSec Bar", FontFamily = (FontFamily)FindResource("S.Display"), FontSize = 22, FontWeight = FontWeights.SemiBold });
+        name.Children.Add(new TextBlock { Text = "Open TaskBar", FontFamily = (FontFamily)FindResource("S.Display"), FontSize = 22, FontWeight = FontWeights.SemiBold });
         if (u.CurrentBuild != null)
             name.Children.Add(new TextBlock
             {
@@ -1614,11 +1614,11 @@ public partial class SettingsWindow : Window
         if (edge < 0) return;
         string windowsSide = EdgeName(edge), barSide = S.Position.ToString().ToLowerInvariant();
         InfoBar($"Windows is keeping space free on the {windowsSide}",
-            $"The Windows taskbar is set to the {windowsSide} and OpSec Bar is at the {barSide}, so Windows keeps a strip free on the " +
+            $"The Windows taskbar is set to the {windowsSide} and Open TaskBar is at the {barSide}, so Windows keeps a strip free on the " +
             $"{windowsSide} and maximized windows stop short of that edge. Put both on the same side: set the Windows taskbar " +
-            $"position to {barSide}, or move OpSec Bar to the {windowsSide}.",
+            $"position to {barSide}, or move Open TaskBar to the {windowsSide}.",
             "Open taskbar settings", () => Process.Start(new ProcessStartInfo("ms-settings:taskbar") { UseShellExecute = true })?.Dispose(),
-            $"Move OpSec Bar to the {windowsSide}", () =>
+            $"Move Open TaskBar to the {windowsSide}", () =>
             {
                 S.Position = PositionFor(edge);
                 // Le barre vengono ricreate sul nuovo lato: poi l'avviso sparisce.

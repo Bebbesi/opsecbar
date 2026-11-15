@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a tag like v1.2.0 builds OpSec Bar and publishes a GitHub release with:
+# Pushing a tag like v1.2.0 builds Open TaskBar and publishes a GitHub release with:
 #   OpSecBar-Setup.exe      the installer
 #   OpSecBar-win-x64.zip    the package the in-app updater downloads
 # Both include the .NET runtime, so they work on a clean Windows 10/11 x64 PC.

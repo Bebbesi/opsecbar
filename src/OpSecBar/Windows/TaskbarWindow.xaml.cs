@@ -63,7 +63,7 @@ public partial class TaskbarWindow : AppBarWindow
         TaskItems.ItemsSource = app.TaskList.Items;
         Media.Attach(app.Media, AppBarEdge, app.Audio);
         Media.FlyoutOpenChanged += OnPopupStateChanged;
-        Tray.Attach(app.Shell.NotificationArea, AppBarEdge);
+        AttachTray();
         Tray.OverflowOpenChanged += OnPopupStateChanged;
         app.SysInfo.Updated += UpdateSysInfo;
         app.Audio.Changed += UpdateVolume;
@@ -115,6 +115,12 @@ public partial class TaskbarWindow : AppBarWindow
             _backdrop = null;
         };
     }
+
+    /// <summary>
+    /// Collega le icone dell'area di notifica. All'avvio dell'app il tray parte dopo le barre (vedi App.StartTray):
+    /// fino ad allora non c'è nulla da mostrare, e l'app richiama questo metodo quando il tray è pronto.
+    /// </summary>
+    public void AttachTray() => Tray.Attach(_app.Shell.NotificationArea, AppBarEdge);
 
     private static AppBarEdge ToEdge(BarPosition p) => p switch
     {
@@ -1014,12 +1020,12 @@ public partial class TaskbarWindow : AppBarWindow
     private void ShowBarMenu(FrameworkElement? anchor)
     {
         var menu = new ContextMenu();
-        menu.Items.Add(MenuEntry("OpSec Bar settings", "", _app.ShowSettings));
+        menu.Items.Add(MenuEntry("Open TaskBar settings", "", _app.ShowSettings));
         menu.Items.Add(MenuEntry("Task Manager", "", ShellHelper.StartTaskManager));
         menu.Items.Add(MenuEntry("Run…", "", () => ShellHelper.ShowRunDialog("", "")));
         menu.Items.Add(MenuEntry("Windows Start menu", "", ShellHelper.ShowStartMenu));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuEntry("Exit OpSec Bar", "", () => _app.ExitApp()));
+        menu.Items.Add(MenuEntry("Exit Open TaskBar", "", () => _app.ExitApp()));
         OpenMenu(menu, anchor);
     }
 

@@ -289,9 +289,9 @@ public class AppSettings : ObservableObject
     public bool UseWinKey { get => _useWinKey; set => Set(ref _useWinKey, value); }
 
     // Pannelli
-    /// <summary>Il click sull'orologio apre il calendario di OpSec Bar invece del pannello notifiche/calendario di Windows.</summary>
+    /// <summary>Il click sull'orologio apre il calendario di Open TaskBar invece del pannello notifiche/calendario di Windows.</summary>
     public bool CustomCalendar { get => _customCalendar; set => Set(ref _customCalendar, value); }
-    /// <summary>Il pulsante delle impostazioni rapide apre il pannello di OpSec Bar invece di quello di Windows.</summary>
+    /// <summary>Il pulsante delle impostazioni rapide apre il pannello di Open TaskBar invece di quello di Windows.</summary>
     public bool CustomQuickSettings { get => _customQuickSettings; set => Set(ref _customQuickSettings, value); }
 
     // Elenchi (salvati esplicitamente quando cambiano)

@@ -3,7 +3,7 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:appbar="clr-namespace:ManagedShell.AppBar;assembly=ManagedShell.AppBar"
                      xmlns:c="clr-namespace:OpSecBar.Controls"
-                     Title="OpSec Bar"
+                     Title="Open TaskBar"
                      AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False" ShowActivated="False"
                      FontFamily="{DynamicResource BarFont}" FontSize="{DynamicResource BarFontSize}"
                      Foreground="{DynamicResource FgBrush}" SnapsToDevicePixels="True">

@@ -59,6 +59,7 @@ public partial class App : Application
     private EventWaitHandle? _exitEvent, _showSettingsEvent;
     private DispatcherTimer? _recreateTimer;
     private WinKeyHook? _winKey;
+    private TrayKeeper? _trayKeeper;
     private bool _exiting, _started;
     private readonly long _startedAt = Environment.TickCount64;
 
@@ -108,7 +109,8 @@ public partial class App : Application
             config.EnableTasksService = true;
             config.AutoStartTasksService = false;
             config.EnableTrayService = true;
-            config.AutoStartTrayService = true;
+            // Il tray parte per ultimo, a barre aperte: vedi StartTray.
+            config.AutoStartTrayService = false;
             config.TaskIconSize = IconSize.Large;
             if (Settings.PinnedTrayIcons != null) config.PinnedNotifyIcons = Settings.PinnedTrayIcons;
             Shell = new ShellManager(config);
@@ -144,6 +146,7 @@ public partial class App : Application
                 });
             });
             OpenTaskbars();
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, StartTray);
             RegisterSignals();
             ApplyWinKey();
             SeedDefaultsOnFirstRun();
@@ -175,12 +178,16 @@ public partial class App : Application
                 catch { }
             };
             trim.Start();
+
+            // Di norma un paio di secondi, ma la registrazione delle barre presso Explorer a volte resta ferma molto
+            // più a lungo (causa ancora da trovare): il tempo nel log dice quando succede.
+            Log.Info($"Barre aperte in {Environment.TickCount64 - _startedAt} ms");
         }
         catch (Exception ex)
         {
             Log.Error("Avvio fallito", ex);
             TaskbarGuard.RestoreWindowsTaskbar();
-            MessageBox.Show("OpSec Bar could not start. The Windows taskbar has been restored.\n\n" + ex.Message,
+            MessageBox.Show("Open TaskBar could not start. The Windows taskbar has been restored.\n\n" + ex.Message,
                 AppInfo.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
@@ -277,6 +284,30 @@ public partial class App : Application
         _recreateTimer.Start();
     }
 
+    /// <summary>
+    /// Avvia l'area di notifica. Appena parte, il tray chiede a tutte le app di registrare la propria icona: ogni app
+    /// risponde subito e aspetta solo pochi secondi che la barra le dia retta. Va quindi fatto per ultimo, a barre
+    /// aperte e con la UI libera:
+    /// - prima di nascondere la taskbar di Windows no, perché nasconderla porta per un attimo quella di Explorer
+    ///   davanti alla nostra finestra, e le icone registrate in quell'attimo finivano su Explorer invece che sulla
+    ///   barra (ad alcuni avvii sì e ad altri no, a seconda dei tempi);
+    /// - prima di aprire le barre nemmeno: registrare una barra presso Explorer a volte tiene ferma la UI a lungo
+    ///   (misurati anche più di un minuto), e le app che in quel tempo provano a registrarsi rinunciano.
+    /// </summary>
+    private void StartTray()
+    {
+        if (_exiting) return;
+        try
+        {
+            Shell.NotificationArea.Initialize();
+            if (Shell.NotificationArea.IsFailed) Log.Warn("Area di notifica non avviata");
+            // Le barre sono nate prima del tray: ora possono mostrarne le icone.
+            foreach (TaskbarWindow bar in _bars) bar.AttachTray();
+            _trayKeeper = new TrayKeeper(Shell);
+        }
+        catch (Exception ex) { Log.Error("Avvio dell'area di notifica", ex); }
+    }
+
     private void ApplyTaskbarHiding()
     {
         if (Settings.HideWindowsTaskbar)
@@ -292,6 +323,9 @@ public partial class App : Application
             Shell.ExplorerHelper.HideExplorerTaskbar = false;
             TaskbarGuard.RestoreWindowsTaskbar();
         }
+
+        // Leggere e cambiare lo stato della taskbar di Windows la porta per un attimo davanti al nostro tray.
+        _trayKeeper?.RequestRefresh();
 
         // Le barre già aperte si riposizionano: sopra la fascia della taskbar nascosta, oppure di nuovo accanto a quella visibile.
         foreach (TaskbarWindow bar in _bars)
@@ -410,14 +444,14 @@ public partial class App : Application
         _startMenu.Toggle(bar, anchor);
     }
 
-    /// <summary>Calendario di OpSec Bar (si apre dall'orologio).</summary>
+    /// <summary>Calendario di Open TaskBar (si apre dall'orologio).</summary>
     public void ToggleCalendar(TaskbarWindow bar, FrameworkElement anchor)
     {
         _calendar ??= new CalendarWindow(this);
         _calendar.Toggle(bar, anchor);
     }
 
-    /// <summary>Impostazioni rapide di OpSec Bar: rete, Bluetooth, volume.</summary>
+    /// <summary>Impostazioni rapide di Open TaskBar: rete, Bluetooth, volume.</summary>
     public void ToggleQuickSettings(TaskbarWindow bar, FrameworkElement anchor)
     {
         _quickSettings ??= new QuickSettingsWindow(this);
@@ -516,7 +550,7 @@ public partial class App : Application
 
     // ---- Disinstallazione ----------------------------------------------------------------------
 
-    /// <summary>Il disinstallatore creato dal programma di installazione; null se OpSec Bar non è stato installato così.</summary>
+    /// <summary>Il disinstallatore creato dal programma di installazione; null se Open TaskBar non è stato installato così.</summary>
     public static string? UninstallerPath
     {
         get
@@ -551,6 +585,7 @@ public partial class App : Application
 
         try { SettingsService?.SaveNow(); } catch { }
         try { _winKey?.Dispose(); } catch { }
+        try { _trayKeeper?.Dispose(); } catch { }
         try { Native.UnregisterHotKey(IntPtr.Zero, EmergencyHotkeyId); } catch { }
         try { _settingsWindow?.Close(); } catch { }
         foreach (FlyoutWindow flyout in Flyouts.ToList())

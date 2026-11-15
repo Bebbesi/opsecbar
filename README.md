@@ -1,4 +1,4 @@
-# OpSecBar
+# Open TaskBar
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)
@@ -6,7 +6,7 @@
 ![Version](https://img.shields.io/badge/version-1.1.5-2ea44f)
 
 **A minimal, fully customizable replacement taskbar for Windows 10 and 11, docked at the top by default.**
-OpSecBar replaces the Windows taskbar visually and functionally **without ever killing Explorer**, and it restores the
+Open TaskBar replaces the Windows taskbar visually and functionally **without ever killing Explorer**, and it restores the
 original taskbar automatically in every situation: normal exit, crash, or being killed from Task Manager.
 
 ```
@@ -77,11 +77,11 @@ Start with Windows can be enabled from *Settings → System*.
 | Command | Effect |
 | --- | --- |
 | `OpSecBar.exe` | Starts the bar. If it is already running, opens Settings. |
-| `OpSecBar.exe --restore` | Closes OpSecBar and restores the Windows taskbar. |
+| `OpSecBar.exe --restore` | Closes Open TaskBar and restores the Windows taskbar. |
 | `scripts\Restore-Taskbar.cmd` | Same as above, with a double click. |
 | `scripts\install.ps1 -Uninstall` | Uninstalls: restores the taskbar and removes files, shortcut and autostart entry. |
 
-> **Emergency key: `Ctrl + Alt + Shift + Q`** closes OpSecBar and immediately restores the Windows taskbar.
+> **Emergency key: `Ctrl + Alt + Shift + Q`** closes Open TaskBar and immediately restores the Windows taskbar.
 
 ## What it does
 
@@ -113,7 +113,7 @@ installed apps (Win32 and Store).
 It opens from the Start button **and from the Windows key**; other shortcuts (Win+E, Win+D, Win+L…) stay with Windows.
 
 ### Calendar and quick settings
-Both are OpSec Bar's own panels, themed like the Start menu.
+Both are Open TaskBar's own panels, themed like the Start menu.
 - **Calendar** (click the clock): the time and date, a month view you can browse with the arrows, the mouse wheel or the
   arrow keys, and a button for the Windows notification panel.
 - **Quick settings**: Wi-Fi and Bluetooth on/off, airplane mode, accessibility tools, energy saver, live captions,
@@ -123,7 +123,7 @@ Both are OpSec Bar's own panels, themed like the Start menu.
   sound, plus the list of output devices (right-click the arrow for a quick device menu).
 
 Right-click the clock or the quick settings button for the Windows panels. To always use the Windows ones, turn off
-**OpSec Bar calendar** / **OpSec Bar quick settings** in **Settings → Taskbar items**.
+**Open TaskBar calendar** / **Open TaskBar quick settings** in **Settings → Taskbar items**.
 
 ### Settings
 | Page | Options |
@@ -146,7 +146,7 @@ Neon Arcade, Custom.
 You can save your own themes, and import or export them as `.json`.
 
 ### Updates
-Every time it starts, OpSec Bar checks the [latest GitHub release](https://github.com/Bebbesi/opsecbar/releases/latest).
+Every time it starts, Open TaskBar checks the [latest GitHub release](https://github.com/Bebbesi/opsecbar/releases/latest).
 If a newer version exists it downloads the package, verifies its SHA-256 digest, replaces its files and restarts.
 Turn this off in *Settings → System → Install updates automatically*; the same page shows the status and a *Check now* button.
 
@@ -174,7 +174,7 @@ git push origin b20261112   # second build of the day: b20261112-2
 2. **Restored on exit**: the menu, Settings, `--restore`, the emergency key and system shutdown all put everything back.
 3. **Watchdog**: a second lightweight process watches OpSecBar. If it crashes or is killed from Task Manager,
    the taskbar is restored within half a second.
-4. **Restored on startup**: if even the watchdog fails, the next launch of OpSecBar restores the saved state
+4. **Restored on startup**: if even the watchdog fails, the next launch of Open TaskBar restores the saved state
    before doing anything else.
 
 If anything goes wrong, run `scripts\Restore-Taskbar.cmd` or press `Ctrl + Alt + Shift + Q`.
@@ -195,7 +195,7 @@ On first launch, settings from the previous version (`%AppData%\NovaBar`) are im
 ## Notes and known limitations
 
 - **Blur / Acrylic / Glass** require Windows *Transparency effects* (Settings → Personalization → Colors).
-  If they are off, OpSecBar falls back to plain transparency without blur and says so on the *Appearance* page.
+  If they are off, Open TaskBar falls back to plain transparency without blur and says so on the *Appearance* page.
 - The **notification center** is the Windows one: open it from the calendar or by right-clicking the clock.
 - Quick settings has no brightness, night light or cast controls: those are in the Windows quick settings
   (right-click the quick settings button). Energy saver opens its Windows settings page instead of switching directly.
@@ -234,7 +234,7 @@ src/OpSecBar/
     AppCatalogService      installed apps (Start menu), launching
     IconService            high-resolution icons from the shell
     BackdropHelper/Window  blur and acrylic, including rounded corners
-    WinKeyHook             Windows key -> OpSecBar Start menu
+    WinKeyHook             Windows key -> Open TaskBar Start menu
     AudioService           volume, mute, sound output device
     RadioService           Wi-Fi, Bluetooth, airplane mode on/off
     WifiService            Wi-Fi networks: scan, connect, disconnect

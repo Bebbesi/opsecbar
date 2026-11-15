@@ -1,7 +1,7 @@
 <Window x:Class="OpSecBar.Windows.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="OpSec Bar Settings" Icon="/Assets/opsecbar.ico" Width="1060" Height="740" MinWidth="840" MinHeight="560"
+        Title="Open TaskBar Settings" Icon="/Assets/opsecbar.ico" Width="1060" Height="740" MinWidth="840" MinHeight="560"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource S.Window}" Foreground="{DynamicResource S.Text}"
         FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14" UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal">
@@ -385,7 +385,7 @@
         <DockPanel Margin="12,8,4,12">
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="14,14,0,18">
                 <Image Source="/Assets/opsecbar.ico" Width="20" Height="20" RenderOptions.BitmapScalingMode="HighQuality" />
-                <TextBlock Text="OpSec Bar" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <TextBlock Text="Open TaskBar" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
                 <!-- Solo sulle build di prova (pre-release): lo decide il codice -->
                 <TextBlock x:Name="BetaText" Text="Beta version" Visibility="Collapsed" FontSize="11" FontWeight="SemiBold" Margin="8,1,0,0" VerticalAlignment="Center" />
             </StackPanel>

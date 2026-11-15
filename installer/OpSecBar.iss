@@ -1,4 +1,4 @@
-; Inno Setup script for the OpSec Bar installer (OpSecBar-Setup.exe).
+; Inno Setup script for the Open TaskBar installer (OpSecBar-Setup.exe).
 ; Built by the Release workflow:  ISCC /DAppVersion=1.2.0 installer\OpSecBar.iss
 ; Per-user install, no administrator rights: same location the in-app updater and scripts\install.ps1 use.
 
@@ -8,7 +8,7 @@
 
 [Setup]
 AppId={{8E1B6C52-6C0B-4E0B-9A53-0B5E7C2F4A11}
-AppName=OpSec Bar
+AppName=Open TaskBar
 AppVersion={#AppVersion}
 AppPublisher=Bebbesi
 AppPublisherURL=https://github.com/Bebbesi/opsecbar
@@ -23,12 +23,12 @@ OutputDir=..
 OutputBaseFilename=OpSecBar-Setup
 SetupIconFile=..\src\OpSecBar\Assets\opsecbar.ico
 UninstallDisplayIcon={app}\OpSecBar.exe
-UninstallDisplayName=OpSec Bar
+UninstallDisplayName=Open TaskBar
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=no
 
-; ---- Look: dark, like the OpSec Bar settings window ----------------------------------------------------
+; ---- Look: dark, like the Open TaskBar settings window ----------------------------------------------------
 ; Needs Inno Setup 6.6 or later (dark mode, background colors). The Release workflow's runner has 6.7.1.
 WizardStyle=modern dark hidebevels
 WizardBackColor=#202020
@@ -42,23 +42,27 @@ DisableWelcomePage=no
 DisableReadyPage=yes
 
 [Messages]
-SetupWindowTitle=OpSec Bar Setup
-WelcomeLabel1=Welcome to OpSec Bar
-WelcomeLabel2=OpSec Bar replaces the Windows taskbar with one you can make your own: themes, its own Start menu, a media player, quick settings and more.%n%nIt installs for your account only and doesn't need administrator rights.
-InstallingLabel=Please wait while OpSec Bar is installed.
-FinishedHeadingLabel=OpSec Bar is ready
-FinishedLabelNoIcons=Right-click the bar for its settings.%n%nTo get the Windows taskbar back at any time, exit OpSec Bar or press Ctrl+Alt+Shift+Q.
-FinishedLabel=Right-click the bar for its settings. You'll also find OpSec Bar in the Start menu.%n%nTo get the Windows taskbar back at any time, exit OpSec Bar or press Ctrl+Alt+Shift+Q.
+SetupWindowTitle=Open TaskBar Setup
+WelcomeLabel1=Welcome to Open TaskBar
+WelcomeLabel2=Open TaskBar replaces the Windows taskbar with one you can make your own: themes, its own Start menu, a media player, quick settings and more.%n%nIt installs for your account only and doesn't need administrator rights.
+InstallingLabel=Please wait while Open TaskBar is installed.
+FinishedHeadingLabel=Open TaskBar is ready
+FinishedLabelNoIcons=Right-click the bar for its settings.%n%nTo get the Windows taskbar back at any time, exit Open TaskBar or press Ctrl+Alt+Shift+Q.
+FinishedLabel=Right-click the bar for its settings. You'll also find Open TaskBar in the Start menu.%n%nTo get the Windows taskbar back at any time, exit Open TaskBar or press Ctrl+Alt+Shift+Q.
 ClickFinish=Click Finish to close Setup.
 
 [Files]
 Source: "..\dist\OpSecBar\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
+[InstallDelete]
+; The app used to be called OpSec Bar: remove the Start menu shortcut with the old name when updating.
+Type: files; Name: "{userprograms}\OpSec Bar.lnk"
+
 [Icons]
-Name: "{userprograms}\OpSec Bar"; Filename: "{app}\OpSecBar.exe"; WorkingDir: "{app}"
+Name: "{userprograms}\Open TaskBar"; Filename: "{app}\OpSecBar.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{app}\OpSecBar.exe"; Description: "Start OpSec Bar"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\OpSecBar.exe"; Description: "Start Open TaskBar"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Close the bar cleanly and bring the Windows taskbar back before the files are removed.
@@ -79,10 +83,10 @@ procedure InitializeWizard;
 begin
   if IsUpdate then
   begin
-    WizardForm.WelcomeLabel1.Caption := 'Update OpSec Bar';
+    WizardForm.WelcomeLabel1.Caption := 'Update Open TaskBar';
     WizardForm.WelcomeLabel2.Caption :=
       'This installs version {#AppVersion} over the one you have.' + #13#10 + #13#10 +
-      'Your settings, themes and GIFs are kept. OpSec Bar closes during the update and you can start it again at the end.';
+      'Your settings, themes and GIFs are kept. Open TaskBar closes during the update and you can start it again at the end.';
   end;
 end;
 
@@ -119,7 +123,7 @@ begin
   begin
     DataDir := ExpandConstant('{userappdata}\OpSecBar');
     if (not UninstallSilent) and DirExists(DataDir) then
-      if MsgBox('Also delete your OpSec Bar settings, themes and GIFs?' + #13#10 + #13#10 + DataDir, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      if MsgBox('Also delete your Open TaskBar settings, themes and GIFs?' + #13#10 + #13#10 + DataDir, mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
         DelTree(DataDir, True, True, True);
   end;
 end;

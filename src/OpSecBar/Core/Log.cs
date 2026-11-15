@@ -5,7 +5,7 @@ namespace OpSecBar.Core;
 public static class AppInfo
 {
     /// <summary>Nome mostrato all'utente.</summary>
-    public const string Name = "OpSec Bar";
+    public const string Name = "Open TaskBar";
 }
 
 /// <summary>Percorsi dei dati dell'applicazione (%AppData%\OpSecBar).</summary>

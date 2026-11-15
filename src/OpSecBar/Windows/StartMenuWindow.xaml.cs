@@ -197,7 +197,7 @@ public partial class StartMenuWindow : FlyoutWindow
         HideFlyout();
         if (!AppCatalogService.Launch(app.ToPinned(), asAdmin))
             MessageBox.Show($"\"{app.Name}\" can't be run as administrator.\nWindows doesn't allow elevating this app.",
-                "OpSec Bar", MessageBoxButton.OK, MessageBoxImage.Information);
+                "Open TaskBar", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private static bool AdminModifiers =>
