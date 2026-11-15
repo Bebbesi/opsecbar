@@ -27,7 +27,7 @@ public partial class TaskbarWindow : AppBarWindow
 {
     private readonly App _app;
     private readonly AppSettings _s;
-    private readonly DispatcherTimer _clock;
+    private readonly DispatcherTimer _clock = new(DispatcherPriority.Background);
     private AppItem? _pressedItem;
     private bool _pressedWasActive;
     private int _openPopups;
@@ -72,10 +72,11 @@ public partial class TaskbarWindow : AppBarWindow
         ApplyElements();
         ApplyTheme();
 
-        _clock = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        // L'orologio si sveglia solo quando il testo può cambiare: a ogni secondo se mostra i secondi, altrimenti a ogni minuto.
         _clock.Tick += (_, _) => UpdateClock();
-        _clock.Start();
         UpdateClock();
+        Microsoft.Win32.SystemEvents.TimeChanged += OnSystemTimeChanged;
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         BarBorder.SizeChanged += (_, _) => UpdateShape();
         Loaded += (_, _) => UpdateShape();
@@ -106,6 +107,8 @@ public partial class TaskbarWindow : AppBarWindow
             EndIconDrag();
             HidePreview();
             _clock.Stop();
+            Microsoft.Win32.SystemEvents.TimeChanged -= OnSystemTimeChanged;
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             _app.SysInfo.Updated -= UpdateSysInfo;
             _app.Audio.Changed -= UpdateVolume;
             _backdrop?.Dispose();
@@ -357,7 +360,7 @@ public partial class TaskbarWindow : AppBarWindow
         // Niente lastra se la barra è nascosta (auto-hide) o ha ceduto il posto a un'app a schermo intero.
         bool blur = BackdropHelper.BlurActive(t.Backdrop) && !_hiddenByAutoHide && Topmost && IsVisible && BarBorder.ActualWidth > 0;
         // Il bordo animato non consuma nulla mentre la barra è nascosta o dietro un'app a schermo intero.
-        FxLayer.SetPaused(_hiddenByAutoHide || !Topmost || !IsVisible);
+        SetAnimationsPaused(_hiddenByAutoHide || !Topmost || !IsVisible);
         Color bg = ThemeService.ParseColor(t.BackgroundColor, Color.FromRgb(0x1B, 0x1C, 0x22));
 
         try
@@ -383,6 +386,18 @@ public partial class TaskbarWindow : AppBarWindow
             }
         }
         catch (Exception ex) { Log.Error("UpdateShape", ex); }
+    }
+
+    private bool _animationsPaused;
+
+    /// <summary>Ferma bordo animato, GIF ed equalizzatore mentre la barra non si vede.</summary>
+    private void SetAnimationsPaused(bool paused)
+    {
+        FxLayer.SetPaused(paused);
+        if (paused == _animationsPaused) return;
+        _animationsPaused = paused;
+        Media.SetPaused(paused);
+        foreach (GifImage gif in GifHost.Children.OfType<GifImage>()) gif.Paused = paused;
     }
 
     private double DeviceScale() =>
@@ -703,8 +718,37 @@ public partial class TaskbarWindow : AppBarWindow
         UpdateClock();
     }
 
+    // Ora di sistema cambiata o PC riattivato: l'orologio si riallinea subito invece di aspettare il prossimo scatto.
+    private void OnSystemTimeChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateClock);
+
+    private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == Microsoft.Win32.PowerModes.Resume) Dispatcher.BeginInvoke(UpdateClock);
+    }
+
+    /// <summary>True se un formato (personalizzato o standard) mostra secondi o frazioni di secondo.</summary>
+    private static bool FormatHasSeconds(string? format) =>
+        !string.IsNullOrWhiteSpace(format) && (format.Trim().Length == 1 || format.IndexOfAny(new[] { 's', 'f', 'F' }) >= 0);
+
+    /// <summary>Programma il prossimo scatto sul prossimo cambio di secondo o di minuto, secondo quello che si vede.</summary>
+    private void ScheduleClock()
+    {
+        if (IsClosing || !_s.ShowClock)
+        {
+            _clock.Stop();
+            return;
+        }
+        bool seconds = string.IsNullOrWhiteSpace(_s.ClockFormat) ? _s.ShowSeconds : FormatHasSeconds(_s.ClockFormat);
+        seconds |= _s.ShowDate && FormatHasSeconds(_s.DateFormat);
+        DateTime now = DateTime.Now;
+        double ms = seconds ? 1000 - now.Millisecond : (60 - now.Second) * 1000 - now.Millisecond;
+        _clock.Interval = TimeSpan.FromMilliseconds(Math.Max(ms, 0) + 20); // poco dopo il cambio, mai prima
+        _clock.Start();
+    }
+
     private void UpdateClock()
     {
+        ScheduleClock();
         if (!_s.ShowClock) return;
         DateTime now = DateTime.Now;
         string time = Format(now, _s.ClockFormat, _s.Clock24h
@@ -815,7 +859,8 @@ public partial class TaskbarWindow : AppBarWindow
             {
                 Margin = IsHorizontal ? new Thickness(3, 0, 3, 0) : new Thickness(0, 3, 0, 3),
                 ToolTip = System.IO.Path.GetFileNameWithoutExtension(item.File),
-                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+                Paused = _animationsPaused
             };
             if (!IsHorizontal) gif.MaxWidth = thickness - 8;
             gif.MouseRightButtonUp += (_, e) =>

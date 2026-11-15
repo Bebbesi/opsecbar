@@ -63,8 +63,27 @@ public partial class MediaWidget : UserControl
         RefreshAll();
     }
 
+    private bool _watchingPosition, _paused;
+
+    private void StopWatchingPosition()
+    {
+        if (!_watchingPosition) return;
+        _watchingPosition = false;
+        _media?.WatchPosition(false);
+    }
+
+    /// <summary>Ferma l'equalizzatore mentre la barra non si vede (auto-hide, app a schermo intero).</summary>
+    public void SetPaused(bool paused)
+    {
+        if (paused == _paused) return;
+        _paused = paused;
+        if (paused) StopEq();
+        else if (RootGrid.Visibility == Visibility.Visible && _media is { IsPlaying: true } && !_vertical) StartEq();
+    }
+
     private void Detach()
     {
+        StopWatchingPosition();
         if (_media != null) _media.PropertyChanged -= OnMediaChanged;
         _media = null;
         StopEq();
@@ -129,7 +148,7 @@ public partial class MediaWidget : UserControl
         PrevButton.Visibility = NextButton.Visibility = Equalizer.Visibility = _vertical ? Visibility.Collapsed : Visibility.Visible;
 
         RefreshModes();
-        if (m.IsPlaying && !_vertical) StartEq(); else StopEq();
+        if (m.IsPlaying && !_vertical && !_paused) StartEq(); else StopEq();
         RefreshTimeline();
     }
 
@@ -183,6 +202,12 @@ public partial class MediaWidget : UserControl
 
     private void Flyout_Opened(object? sender, EventArgs e)
     {
+        if (!_watchingPosition && _media != null)
+        {
+            _watchingPosition = true;
+            _media.WatchPosition(true);
+            RefreshTimeline();
+        }
         RefreshVolume();
         _volumeTimer.Start(); // segue anche le modifiche fatte dal mixer di Windows o dall'app stessa
         FlyoutOpenChanged?.Invoke(true);
@@ -192,6 +217,7 @@ public partial class MediaWidget : UserControl
     {
         _flyoutClosedAt = DateTime.Now;
         _seeking = false;
+        StopWatchingPosition();
         _volumeTimer.Stop();
         FlyoutOpenChanged?.Invoke(false);
     }

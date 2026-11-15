@@ -63,6 +63,24 @@ public sealed class MediaService : ObservableObject
         _tick.Tick += (_, _) => UpdateInterpolatedPosition();
     }
 
+    private int _positionWatchers;
+
+    /// <summary>
+    /// La posizione viene interpolata (uno scatto al secondo) solo mentre qualcuno la mostra: il player espanso.
+    /// A player chiuso non serve a nessuno e il timer resta fermo.
+    /// </summary>
+    public void WatchPosition(bool on)
+    {
+        _positionWatchers = Math.Max(0, _positionWatchers + (on ? 1 : -1));
+        if (on) UpdateInterpolatedPosition();
+        UpdateTick();
+    }
+
+    private void UpdateTick()
+    {
+        if (_positionWatchers > 0 && IsPlaying && HasTimeline) _tick.Start(); else _tick.Stop();
+    }
+
     public async void Start()
     {
         if (_started) return;
@@ -226,14 +244,14 @@ public sealed class MediaService : ObservableObject
             if (DateTime.UtcNow < _seekGuardUntil && Math.Abs((reported - _seekTarget).TotalSeconds) > 2.5)
             {
                 // Posizione vecchia, precedente al seek: si continua a interpolare dal punto richiesto.
-                if (IsPlaying && HasTimeline) _tick.Start(); else _tick.Stop();
+                UpdateTick();
                 return;
             }
             _seekGuardUntil = DateTime.MinValue;
             _basePosition = reported;
             _baseTime = t.LastUpdatedTime;
             UpdateInterpolatedPosition();
-            if (IsPlaying && HasTimeline) _tick.Start(); else _tick.Stop();
+            UpdateTick();
         }
         catch (Exception ex) { Log.Warn("RefreshTimeline: " + ex.Message); }
     }

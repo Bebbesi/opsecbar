@@ -61,8 +61,8 @@ public sealed class WinKeyHook : IDisposable
         {
             if (code >= 0)
             {
-                var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                if (data.dwExtraInfo != Marker) HandleKey(wParam.ToInt32(), (int)data.vkCode);
+                // Passa da qui ogni tasto premuto nel sistema: si leggono solo i due campi che servono, senza allocare.
+                if (Marshal.ReadIntPtr(lParam, ExtraInfoOffset) != Marker) HandleKey(wParam.ToInt32(), Marshal.ReadInt32(lParam));
             }
         }
         catch (Exception ex) { Log.Error("WinKeyHook", ex); }
@@ -115,6 +115,7 @@ public sealed class WinKeyHook : IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr dwExtraInfo; }
+    private static readonly int ExtraInfoOffset = (int)Marshal.OffsetOf<KBDLLHOOKSTRUCT>(nameof(KBDLLHOOKSTRUCT.dwExtraInfo));
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }

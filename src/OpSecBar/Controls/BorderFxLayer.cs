@@ -142,11 +142,18 @@ public sealed class BorderFxLayer : Canvas
     private DropShadowEffect Glow(double blur = 8, double opacity = 0.9) =>
         new() { Color = _color, BlurRadius = blur, ShadowDepth = 0, Opacity = opacity };
 
-    private static Timeline Forever(Timeline t)
+    /// <summary>
+    /// Animazione senza fine a frame rate limitato. Senza limite WPF ridisegna la barra alla frequenza dello schermo
+    /// (anche 144-240 volte al secondo), e ogni fotogramma di una finestra trasparente costa caro.
+    /// </summary>
+    private static Timeline Forever(Timeline t, int fps)
     {
         t.RepeatBehavior = RepeatBehavior.Forever;
+        Timeline.SetDesiredFrameRate(t, fps);
         return t;
     }
+
+    private const int SmoothFps = 60, SlowFps = 30;
 
     private void BuildPulse(double w, double h)
     {
@@ -156,7 +163,7 @@ public sealed class BorderFxLayer : Canvas
         {
             AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
         };
-        r.BeginAnimation(OpacityProperty, Forever(anim) as DoubleAnimation);
+        r.BeginAnimation(OpacityProperty, Forever(anim, SlowFps) as DoubleAnimation);
     }
 
     /// <summary>Una o più comete che corrono lungo il bordo, con una coda che sfuma.</summary>
@@ -178,7 +185,7 @@ public sealed class BorderFxLayer : Canvas
             if (glow) r.Effect = Glow(10, 1);
             // Tutti gli strati condividono il fronte della cometa: ognuno parte "indietro" della propria lunghezza.
             r.BeginAnimation(Shape.StrokeDashOffsetProperty,
-                (DoubleAnimation)Forever(new DoubleAnimation(len / th, (len - period) / th, duration)));
+                (DoubleAnimation)Forever(new DoubleAnimation(len / th, (len - period) / th, duration), SmoothFps));
         }
     }
 
@@ -189,7 +196,7 @@ public sealed class BorderFxLayer : Canvas
         r.StrokeDashArray = new DoubleCollection { 3, 3 };
         r.Opacity = 0.9;
         r.BeginAnimation(Shape.StrokeDashOffsetProperty,
-            (DoubleAnimation)Forever(new DoubleAnimation(0, -6, TimeSpan.FromSeconds(0.45 / _speed))));
+            (DoubleAnimation)Forever(new DoubleAnimation(0, -6, TimeSpan.FromSeconds(0.45 / _speed)), SlowFps));
     }
 
     private void BuildRainbow(double w, double h)
@@ -204,7 +211,7 @@ public sealed class BorderFxLayer : Canvas
         var move = new TranslateTransform();
         brush.RelativeTransform = move;
         Outline(w, h, brush, Math.Max(2, StrokeWidth));
-        var anim = (DoubleAnimation)Forever(new DoubleAnimation(0, 0.3, TimeSpan.FromSeconds(2.2 / _speed)));
+        var anim = (DoubleAnimation)Forever(new DoubleAnimation(0, 0.3, TimeSpan.FromSeconds(2.2 / _speed)), SlowFps);
         move.BeginAnimation(w >= h ? TranslateTransform.XProperty : TranslateTransform.YProperty, anim);
     }
 
@@ -233,7 +240,7 @@ public sealed class BorderFxLayer : Canvas
         {
             AutoReverse = true, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
         };
-        bar.BeginAnimation(horizontal ? LeftProperty : TopProperty, (DoubleAnimation)Forever(anim));
+        bar.BeginAnimation(horizontal ? LeftProperty : TopProperty, (DoubleAnimation)Forever(anim, SmoothFps));
     }
 
     // =============================================================================================

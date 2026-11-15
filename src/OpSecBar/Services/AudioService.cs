@@ -6,13 +6,22 @@ namespace OpSecBar.Services;
 
 /// <summary>
 /// Volume principale del dispositivo di riproduzione predefinito (Core Audio, IAudioEndpointVolume).
-/// Lo stato viene letto con un timer leggero, così segue anche le modifiche fatte da Windows o da altre app.
+/// Lo stato arriva dalle notifiche di Core Audio (volume, mute, cambio del dispositivo predefinito), così segue anche
+/// le modifiche fatte da Windows o da altre app senza interrogare il dispositivo di continuo. Un timer lento resta
+/// come rete di sicurezza; se le notifiche non si possono registrare si torna alla lettura periodica.
 /// </summary>
 public sealed partial class AudioService
 {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(900), SafetyInterval = TimeSpan.FromSeconds(20);
+
+    private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timer;
+    private readonly VolumeCallback _volumeCallback;
+    private readonly DeviceCallback _deviceCallback;
     private IAudioEndpointVolume? _endpoint;
-    private int _ticks;
+    private IMMDeviceEnumerator? _enumerator; // tenuto vivo: è lui a consegnare le notifiche sui dispositivi
+    private bool _volumeEvents, _deviceEvents;
+    private int _ticks, _pollQueued;
 
     /// <summary>Volume 0–100.</summary>
     public int Volume { get; private set; } = -1;
@@ -23,8 +32,55 @@ public sealed partial class AudioService
 
     public AudioService(Dispatcher dispatcher)
     {
-        _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(900) };
+        _dispatcher = dispatcher;
+        _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = PollInterval };
         _timer.Tick += (_, _) => Poll();
+        _volumeCallback = new VolumeCallback(this);
+        _deviceCallback = new DeviceCallback(this);
+    }
+
+    /// <summary>Notifica di Core Audio (arriva su un thread suo): la lettura vera avviene sul thread della UI, una per volta.</summary>
+    private void QueuePoll(bool deviceChanged)
+    {
+        if (deviceChanged)
+        {
+            _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                Release(); // il volume va riletto dal nuovo dispositivo
+                Poll();
+            });
+            return;
+        }
+        if (Interlocked.Exchange(ref _pollQueued, 1) == 1) return;
+        _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            Interlocked.Exchange(ref _pollQueued, 0);
+            Poll();
+        });
+    }
+
+    private sealed class VolumeCallback(AudioService owner) : IAudioEndpointVolumeCallback
+    {
+        public int OnNotify(IntPtr data)
+        {
+            owner.QueuePoll(false);
+            return 0;
+        }
+    }
+
+    private sealed class DeviceCallback(AudioService owner) : IMMNotificationClient
+    {
+        public int OnDeviceStateChanged(string deviceId, int newState) => 0;
+        public int OnDeviceAdded(string deviceId) => 0;
+        public int OnDeviceRemoved(string deviceId) => 0;
+
+        public int OnDefaultDeviceChanged(int flow, int role, string? defaultDeviceId)
+        {
+            if (flow == 0 /* eRender */ && role == 1 /* eMultimedia */) owner.QueuePoll(true);
+            return 0;
+        }
+
+        public int OnPropertyValueChanged(string deviceId, PROPERTYKEY key) => 0;
     }
 
     public void SetEnabled(bool on)
@@ -38,6 +94,7 @@ public sealed partial class AudioService
         {
             _timer.Stop();
             Release();
+            ReleaseEnumerator();
         }
     }
 
@@ -152,8 +209,9 @@ public sealed partial class AudioService
 
     private void Poll()
     {
-        // Il dispositivo predefinito può cambiare (cuffie, HDMI...): ogni tanto lo si richiede da capo.
-        if (++_ticks % 6 == 0) Release();
+        // Senza notifiche il dispositivo predefinito può cambiare a nostra insaputa (cuffie, HDMI...): ogni tanto lo si
+        // richiede da capo.
+        if (!_deviceEvents && ++_ticks % 6 == 0) Release();
         int volume = -1;
         bool muted = false;
         Run(e =>
@@ -161,6 +219,9 @@ public sealed partial class AudioService
             if (e.GetMasterVolumeLevelScalar(out float level) == 0) volume = (int)Math.Round(level * 100);
             if (e.GetMute(out bool m) == 0) muted = m;
         });
+        // Con le notifiche attive il timer è solo una rete di sicurezza; senza, si torna alla lettura frequente.
+        TimeSpan interval = _volumeEvents && _deviceEvents ? SafetyInterval : PollInterval;
+        if (_timer.Interval != interval) _timer.Interval = interval;
         if (volume == Volume && muted == Muted) return;
         Volume = volume;
         Muted = muted;
@@ -181,28 +242,54 @@ public sealed partial class AudioService
         }
     }
 
-    private static IAudioEndpointVolume? Acquire()
+    private IAudioEndpointVolume? Acquire()
     {
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        if (_enumerator == null)
+        {
+            _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+            try { _deviceEvents = _enumerator.RegisterEndpointNotificationCallback(_deviceCallback) == 0; }
+            catch { _deviceEvents = false; }
+        }
+        if (_enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out IMMDevice? device) != 0 || device == null) return null;
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out IMMDevice? device) != 0 || device == null) return null;
-            try
+            Guid iid = typeof(IAudioEndpointVolume).GUID;
+            if (device.Activate(ref iid, 0x17 /* CLSCTX_ALL */, IntPtr.Zero, out object? o) != 0) return null;
+            var endpoint = o as IAudioEndpointVolume;
+            if (endpoint != null)
             {
-                Guid iid = typeof(IAudioEndpointVolume).GUID;
-                if (device.Activate(ref iid, 0x17 /* CLSCTX_ALL */, IntPtr.Zero, out object? o) != 0) return null;
-                return o as IAudioEndpointVolume;
+                try { _volumeEvents = endpoint.RegisterControlChangeNotify(_volumeCallback) == 0; }
+                catch { _volumeEvents = false; }
             }
-            finally { Marshal.ReleaseComObject(device); }
+            return endpoint;
         }
-        finally { Marshal.ReleaseComObject(enumerator); }
+        finally { Marshal.ReleaseComObject(device); }
     }
 
     private void Release()
     {
         if (_endpoint == null) return;
+        try
+        {
+            if (_volumeEvents) _endpoint.UnregisterControlChangeNotify(_volumeCallback);
+        }
+        catch { }
+        _volumeEvents = false;
         try { Marshal.ReleaseComObject(_endpoint); } catch { }
         _endpoint = null;
+    }
+
+    private void ReleaseEnumerator()
+    {
+        if (_enumerator == null) return;
+        try
+        {
+            if (_deviceEvents) _enumerator.UnregisterEndpointNotificationCallback(_deviceCallback);
+        }
+        catch { }
+        _deviceEvents = false;
+        try { Marshal.ReleaseComObject(_enumerator); } catch { }
+        _enumerator = null;
     }
 
     // ---- COM -------------------------------------------------------------------------------
@@ -216,6 +303,24 @@ public sealed partial class AudioService
         [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection? devices);
         [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice? device);
         [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice? device);
+        [PreserveSig] int RegisterEndpointNotificationCallback(IMMNotificationClient client);
+        [PreserveSig] int UnregisterEndpointNotificationCallback(IMMNotificationClient client);
+    }
+
+    [ComImport, Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMNotificationClient
+    {
+        [PreserveSig] int OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int newState);
+        [PreserveSig] int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+        [PreserveSig] int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+        [PreserveSig] int OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string? defaultDeviceId);
+        [PreserveSig] int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string deviceId, PROPERTYKEY key);
+    }
+
+    [ComImport, Guid("657804FA-D6AD-4496-8A60-352752AF4F89"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioEndpointVolumeCallback
+    {
+        [PreserveSig] int OnNotify(IntPtr data);
     }
 
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -275,8 +380,8 @@ public sealed partial class AudioService
     [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioEndpointVolume
     {
-        [PreserveSig] int RegisterControlChangeNotify(IntPtr notify);
-        [PreserveSig] int UnregisterControlChangeNotify(IntPtr notify);
+        [PreserveSig] int RegisterControlChangeNotify(IAudioEndpointVolumeCallback notify);
+        [PreserveSig] int UnregisterControlChangeNotify(IAudioEndpointVolumeCallback notify);
         [PreserveSig] int GetChannelCount(out uint count);
         [PreserveSig] int SetMasterVolumeLevel(float levelDb, ref Guid ctx);
         [PreserveSig] int SetMasterVolumeLevelScalar(float level, ref Guid ctx);

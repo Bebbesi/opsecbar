@@ -164,7 +164,8 @@ public sealed class TaskListService
         // Sottoscrizione ai cambi di stato delle finestre.
         foreach (var w in windows)
             if (_hooked.Add(w)) w.PropertyChanged += OnWindowPropertyChanged;
-        foreach (var gone in _hooked.Where(h => !windows.Contains(h)).ToList())
+        var open = new HashSet<ApplicationWindow>(windows);
+        foreach (var gone in _hooked.Where(h => !open.Contains(h)).ToList())
         {
             gone.PropertyChanged -= OnWindowPropertyChanged;
             _hooked.Remove(gone);

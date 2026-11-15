@@ -124,11 +124,20 @@ public partial class App : Application
 
             SettingsService.Changed += OnSettingChanged;
             // Se l'utente attiva/disattiva gli effetti di trasparenza di Windows, blur e acrylic si adeguano subito.
+            // L'avviso arriva a raffiche (e per qualsiasi preferenza, anche un cambio di sfondo): le si unisce in un solo
+            // aggiornamento, fatto quando la UI è libera.
+            bool preferenceRefreshPending = false;
             Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, _) => Dispatcher.BeginInvoke(() =>
             {
-                if (_exiting) return;
-                ThemeService.ApplyResources(Settings.Theme);
-                foreach (var bar in _bars) bar.ApplyTheme();
+                if (_exiting || preferenceRefreshPending) return;
+                preferenceRefreshPending = true;
+                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+                {
+                    preferenceRefreshPending = false;
+                    if (_exiting) return;
+                    ThemeService.ApplyResources(Settings.Theme);
+                    foreach (var bar in _bars) bar.ApplyTheme();
+                });
             });
             OpenTaskbars();
             RegisterSignals();

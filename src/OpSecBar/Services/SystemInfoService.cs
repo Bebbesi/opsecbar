@@ -41,6 +41,7 @@ public sealed class SystemInfoService : ObservableObject
     {
         try
         {
+            (int cpu, int ram, int battery, bool charging) before = (_cpu, _ram, _battery, _charging);
             if (Native.GetSystemTimes(out long idle, out long kernel, out long user))
             {
                 long total = kernel + user;
@@ -59,7 +60,7 @@ public sealed class SystemInfoService : ObservableObject
                 Battery = hasBattery ? power.BatteryLifePercent : -1;
                 Charging = power.ACLineStatus == 1;
             }
-            Updated?.Invoke();
+            if (before != (_cpu, _ram, _battery, _charging)) Updated?.Invoke();
         }
         catch (Exception ex) { Log.Warn("SystemInfo: " + ex.Message); }
     }
