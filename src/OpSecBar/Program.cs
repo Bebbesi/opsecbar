@@ -22,7 +22,7 @@ public static class Program
 
         if (args.Length >= 1 && args[0] == "--restore")
         {
-            if (EventWaitHandle.TryOpenExisting(ExitEventName, out EventWaitHandle? exit))
+            if (TryOpenEvent(ExitEventName, out EventWaitHandle? exit))
             {
                 exit.Set();
                 exit.Dispose();
@@ -46,6 +46,31 @@ public static class Program
     {
         var app = new App();
         app.InitializeComponent();
-        return app.Run();
+        try
+        {
+            return app.Run();
+        }
+        catch (Exception ex) when (app.IsExiting)
+        {
+            // L'uscita è già stata completata (impostazioni salvate, taskbar di Windows ripristinata): un errore di WPF
+            // mentre smonta il rendering (es. UCEERR_RENDERTHREADFAILURE) non deve diventare un crash con tanto di
+            // segnalazione di Windows.
+            OpSecBar.Core.Log.Warn("Errore ignorato durante la chiusura: " + ex.Message);
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Apre un evento con nome di un'altra istanza. Se quell'istanza gira con privilegi diversi Windows nega l'accesso
+    /// (con un'eccezione, non con "non trovato"): lo si tratta come se l'evento non ci fosse.
+    /// </summary>
+    public static bool TryOpenEvent(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out EventWaitHandle? handle)
+    {
+        try { return EventWaitHandle.TryOpenExisting(name, out handle); }
+        catch (Exception)
+        {
+            handle = null;
+            return false;
+        }
     }
 }

@@ -60,6 +60,10 @@ public partial class App : Application
     private DispatcherTimer? _recreateTimer;
     private WinKeyHook? _winKey;
     private bool _exiting, _started;
+    private readonly long _startedAt = Environment.TickCount64;
+
+    /// <summary>True da quando è iniziata l'uscita (o il riavvio) dell'app.</summary>
+    public bool IsExiting => _exiting;
     private int _recentErrors;
     private DateTime _lastError = DateTime.MinValue;
 
@@ -74,7 +78,7 @@ public partial class App : Application
         if (!isFirstInstance)
         {
             // Già in esecuzione: chiedi all'istanza attiva di aprire le Impostazioni.
-            if (EventWaitHandle.TryOpenExisting(Program.ShowSettingsEventName, out EventWaitHandle? ev))
+            if (Program.TryOpenEvent(Program.ShowSettingsEventName, out EventWaitHandle? ev))
             {
                 // Questa istanza è quella appena lanciata dall'utente: cede all'altra il diritto di andare in primo piano.
                 Native.AllowSetForegroundWindow(Native.ASFW_ANY);
@@ -579,6 +583,18 @@ public partial class App : Application
     {
         Log.Error("Eccezione non gestita (UI)", e.Exception);
         e.Handled = true;
+        if (_exiting) return;
+
+        // Il thread di rendering di WPF è morto (driver video riavviato, memoria video esaurita, cambio di modalità
+        // dello schermo...): da qui la barra non si ridisegna più e ogni operazione grafica fallisce. Non si recupera
+        // dall'interno: si riavvia la barra. Se succede appena avviati non si insiste, per non riavviarsi all'infinito.
+        if (IsRenderThreadFailure(e.Exception))
+        {
+            bool restart = Environment.TickCount64 - _startedAt > 60_000;
+            Log.Error(restart ? "Rendering di WPF interrotto: riavvio la barra" : "Rendering di WPF interrotto subito dopo l'avvio: esco");
+            ExitApp(restart);
+            return;
+        }
 
         // Un errore isolato non deve far cadere la barra; una raffica di errori sì (e ripristina la taskbar di Windows).
         if ((DateTime.Now - _lastError).TotalSeconds > 20) _recentErrors = 0;
@@ -588,6 +604,13 @@ public partial class App : Application
             Log.Error("Troppi errori consecutivi: esco e ripristino la taskbar di Windows");
             ExitApp();
         }
+    }
+
+    private static bool IsRenderThreadFailure(Exception? ex)
+    {
+        for (; ex != null; ex = ex.InnerException)
+            if (ex is System.Runtime.InteropServices.COMException { HResult: unchecked((int)0x88980406) }) return true; // UCEERR_RENDERTHREADFAILURE
+        return false;
     }
 
     private void OnFatalException(object sender, UnhandledExceptionEventArgs e)
