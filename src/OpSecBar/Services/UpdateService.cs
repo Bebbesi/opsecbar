@@ -22,9 +22,13 @@ public enum UpdateState { Idle, Checking, UpToDate, Available, Downloading, Read
 public sealed class UpdateService
 {
     public const string Repository = "Bebbesi/opsecbar";
-    private const string LatestReleaseUrl = "https://api.github.com/repos/" + Repository + "/releases/latest";
-    private const string AllReleasesUrl = "https://api.github.com/repos/" + Repository + "/releases?per_page=100";
-    private const string AllowedDownloadPrefix = "https://github.com/" + Repository + "/releases/download/";
+    /// <summary>Secondo repository: si guarda qui solo se il primo non ha un aggiornamento da proporre.</summary>
+    public const string FallbackRepository = "Bebbesi/opentaskbar";
+    private static readonly string[] AllowedDownloadPrefixes =
+    {
+        "https://github.com/" + Repository + "/releases/download/",
+        "https://github.com/" + FallbackRepository + "/releases/download/"
+    };
 
     private static readonly HttpClient Http = CreateClient();
     private string? _downloadUrl, _expectedSha256, _stagedDir;
@@ -122,7 +126,46 @@ public sealed class UpdateService
         Changed?.Invoke();
     }
 
-    /// <summary>Controlla l'ultima release. Con <paramref name="install"/> scarica e prepara subito l'aggiornamento.</summary>
+    private sealed record Release(string Repo, JsonElement Json, string Tag, DateTimeOffset Date);
+
+    /// <summary>
+    /// Release pubblicate di un repository, dalla più recente: tutte, oppure solo l'ultima release normale.
+    /// Lista vuota se non ce ne sono; null (con il motivo) se il controllo non è riuscito.
+    /// </summary>
+    private static async Task<(List<Release>? Releases, string? Error)> FetchAsync(string repo, bool all)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            string url = "https://api.github.com/repos/" + repo + (all ? "/releases?per_page=100" : "/releases/latest");
+            using HttpResponseMessage response = await Http.GetAsync(url, cts.Token);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return (new List<Release>(), null); // nessuna release pubblicata
+            response.EnsureSuccessStatusCode();
+
+            using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cts.Token));
+            IEnumerable<JsonElement> items = all ? doc.RootElement.EnumerateArray() : new[] { doc.RootElement };
+            // Le build di prova (b20261112) non hanno un numero di versione: release e build si ordinano per data.
+            List<Release> releases = items
+                .Where(r => !(r.TryGetProperty("draft", out JsonElement d) && d.ValueKind == JsonValueKind.True))
+                .Select(r => new Release(repo, r.Clone(), r.GetProperty("tag_name").GetString() ?? "", PublishedAt(r)))
+                .Where(r => r.Tag.Length > 0)
+                .OrderByDescending(r => r.Date)
+                .ToList();
+            return (releases, null);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Controllo aggiornamenti ({repo}): {ex.Message}");
+            return (null, ex is TaskCanceledException ? "The update server did not respond." : ex.Message);
+        }
+    }
+
+    private bool IsCurrent(Release r) => r.Tag.Equals(CurrentTag, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Controlla l'ultima release su <see cref="Repository"/> e, se lì non c'è un aggiornamento, su
+    /// <see cref="FallbackRepository"/>. Con <paramref name="install"/> scarica e prepara subito l'aggiornamento.
+    /// </summary>
     /// <param name="includePrereleases">
     /// Considera anche le build di prova: vale la release pubblicata più di recente, qualunque sia. Senza, vale l'ultima
     /// release; chi ha una build di prova installata torna a quella, anche se è più vecchia.
@@ -135,69 +178,70 @@ public sealed class UpdateService
         try
         {
             Set(UpdateState.Checking);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            using HttpResponseMessage response = await Http.GetAsync(includePrereleases ? AllReleasesUrl : LatestReleaseUrl, cts.Token);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                Set(UpdateState.UpToDate); // nessuna release pubblicata
-                return false;
-            }
-            response.EnsureSuccessStatusCode();
+            (List<Release>? primaryResult, string? primaryError) = await FetchAsync(Repository, includePrereleases);
+            List<Release> primary = primaryResult ?? new List<Release>();
+            List<Release> fallback = new();
+            Release? pick = null, shown = primary.FirstOrDefault();
 
-            using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cts.Token));
-            JsonElement root;
-            bool newer;
             if (includePrereleases)
             {
-                // Le build di prova (b20261112) non hanno un numero di versione: release e build si ordinano per data.
-                var releases = doc.RootElement.EnumerateArray()
-                    .Where(r => !(r.TryGetProperty("draft", out JsonElement d) && d.ValueKind == JsonValueKind.True))
-                    .Select(r => (Json: r, Tag: r.GetProperty("tag_name").GetString() ?? "", Date: PublishedAt(r)))
-                    .Where(r => r.Tag.Length > 0)
-                    .OrderByDescending(r => r.Date)
-                    .ToList();
-                if (releases.Count == 0)
-                {
-                    Set(UpdateState.UpToDate); // nessuna release pubblicata
-                    return false;
-                }
-
-                var newest = releases[0];
-                root = newest.Json;
-                int mine = releases.FindIndex(r => r.Tag.Equals(CurrentTag, StringComparison.OrdinalIgnoreCase));
-                if (mine >= 0) newer = mine > 0 && releases[mine].Date < newest.Date;
+                Release? mine = primary.Find(IsCurrent);
+                if (mine != null && primary[0].Date > mine.Date) pick = primary[0];
                 else
                 {
+                    fallback = (await FetchAsync(FallbackRepository, true)).Releases ?? fallback;
+                    // Tra i due repository ci si sposta solo verso una release pubblicata dopo quella installata:
+                    // così nessuno dei due riporta indietro a una versione che l'altro ha già superato.
+                    DateTimeOffset? installed = (mine ?? fallback.Find(IsCurrent))?.Date;
                     // La versione installata non è (più) su GitHub. Una release più avanti di tutte quelle pubblicate
-                    // (build locale) resta dov'è; altrimenti si passa alla più recente.
-                    Version? newestStable = releases.Select(r => ParseStable(r.Tag)).FirstOrDefault(v => v != null);
-                    newer = CurrentBuild != null || newestStable == null || CurrentVersion <= newestStable;
+                    // (build locale) resta dov'è; altrimenti si passa alla più recente. Se il primo repository non ha
+                    // risposto non si sa abbastanza per decidere, e si resta dove si è.
+                    Version? newestStable = primary.Concat(fallback).Select(r => ParseStable(r.Tag)).Where(v => v != null).Max();
+                    bool unknownIsOlder = primaryError == null && (CurrentBuild != null || newestStable == null || CurrentVersion <= newestStable);
+                    bool Newer(Release r) => !IsCurrent(r) && (installed is DateTimeOffset date ? r.Date > date : unknownIsOlder);
+
+                    if (primary.Count > 0 && Newer(primary[0])) pick = primary[0];
+                    else if (fallback.Count > 0 && Newer(fallback[0])) pick = fallback[0];
+                    shown ??= fallback.FirstOrDefault();
                 }
-                SetLatest(newest.Tag, root);
             }
             else
             {
-                root = doc.RootElement;
-                string tag = root.GetProperty("tag_name").GetString() ?? "";
-                if (ParseStable(tag) is not Version latest)
+                if (shown != null && ParseStable(shown.Tag) == null)
                 {
-                    Set(UpdateState.Failed, $"Unrecognized release tag '{tag}'.");
-                    return false;
+                    primaryError = $"Unrecognized release tag '{shown.Tag}'.";
+                    shown = null;
                 }
-                SetLatest(tag, root);
                 // Da una build di prova si torna all'ultima release, anche se ha un numero di versione più basso.
-                newer = CurrentBuild != null || latest > CurrentVersion;
+                if (shown != null && (CurrentBuild != null || ParseStable(shown.Tag) > CurrentVersion)) pick = shown;
+                else
+                {
+                    fallback = (await FetchAsync(FallbackRepository, false)).Releases ?? fallback;
+                    Release? other = fallback.FirstOrDefault(r => ParseStable(r.Tag) != null);
+                    if (other != null && (ParseStable(other.Tag) > CurrentVersion || (CurrentBuild != null && primaryError == null))) pick = other;
+                    shown ??= other;
+                }
+            }
+
+            shown = pick ?? shown;
+            if (shown != null) SetLatest(shown.Tag, shown.Json);
+            if (pick == null)
+            {
+                if (primaryError != null) Set(UpdateState.Failed, primaryError);
+                else Set(UpdateState.UpToDate);
+                return false;
             }
 
             _downloadUrl = null;
             _expectedSha256 = null;
-            if (root.TryGetProperty("assets", out JsonElement assets))
+            if (pick.Json.TryGetProperty("assets", out JsonElement assets))
             {
                 foreach (JsonElement asset in assets.EnumerateArray())
                 {
                     string name = asset.GetProperty("name").GetString() ?? "";
                     string url = asset.GetProperty("browser_download_url").GetString() ?? "";
-                    if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || !url.StartsWith(AllowedDownloadPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                        !AllowedDownloadPrefixes.Any(p => url.StartsWith(p, StringComparison.OrdinalIgnoreCase))) continue;
                     _downloadUrl = url;
                     if (asset.TryGetProperty("digest", out JsonElement digest) && digest.GetString() is string d && d.StartsWith("sha256:"))
                         _expectedSha256 = d["sha256:".Length..];
@@ -205,18 +249,13 @@ public sealed class UpdateService
                 }
             }
 
-            if (!newer)
-            {
-                Set(UpdateState.UpToDate);
-                return false;
-            }
             if (_downloadUrl == null)
             {
                 Set(UpdateState.Failed, $"Release {LatestLabel} has no downloadable package.");
                 return false;
             }
 
-            Log.Info($"Aggiornamento disponibile: {CurrentLabel} -> {LatestLabel}{(LatestIsPrerelease ? " (pre-release)" : "")}");
+            Log.Info($"Aggiornamento disponibile: {CurrentLabel} -> {LatestLabel}{(LatestIsPrerelease ? " (pre-release)" : "")} da {pick.Repo}");
             Set(UpdateState.Available);
             if (!install) return false;
             return await DownloadCoreAsync();
