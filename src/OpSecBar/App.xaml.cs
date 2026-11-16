@@ -394,6 +394,7 @@ public partial class App : Application
                 case nameof(AppSettings.StartFavorites):
                 case nameof(AppSettings.StartShowFavorites):
                 case nameof(AppSettings.StartShowRecent):
+                case nameof(AppSettings.StartHideUserName):
                 case nameof(AppSettings.StartMenuWidth):
                 case nameof(AppSettings.StartMenuHeight):
                     _startMenu?.ApplyTheme();

@@ -26,7 +26,6 @@ public partial class StartMenuWindow : FlyoutWindow
     public StartMenuWindow(App app) : base(app)
     {
         InitializeComponent();
-        UserName.Text = Environment.UserName;
     }
 
     // ---- Apertura --------------------------------------------------------------------------------
@@ -51,6 +50,7 @@ public partial class StartMenuWindow : FlyoutWindow
         AppSettings s = _app.Settings;
         Width = Math.Clamp(s.StartMenuWidth, 320, 900) + ShadowMargin * 2;
         Height = Math.Clamp(s.StartMenuHeight, 380, 1200) + ShadowMargin * 2;
+        UserName.Text = s.StartHideUserName ? new string('*', Environment.UserName.Length) : Environment.UserName;
         if (IsVisible)
         {
             RefreshFavorites();
