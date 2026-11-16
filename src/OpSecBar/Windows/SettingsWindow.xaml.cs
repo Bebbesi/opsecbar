@@ -588,6 +588,8 @@ public partial class SettingsWindow : Window
             Toggle(S.CustomQuickSettings, v => S.CustomQuickSettings = v));
         Row(other, "Start button", null, Toggle(S.ShowStartButton, v => S.ShowStartButton = v));
         Row(other, "System monitor", "CPU, memory and battery.", Toggle(S.ShowSysInfo, v => S.ShowSysInfo = v));
+        Row(other, "Show desktop", "A thin line at the end of the bar. Click it to minimize every window, click again to bring them back.",
+            Toggle(S.ShowDesktopButton, v => S.ShowDesktopButton = v));
     }
 
     // ---- Layout avanzato: l'utente decide in quale zona della barra sta ogni elemento, e in che ordine ----
@@ -1012,6 +1014,12 @@ public partial class SettingsWindow : Window
         }, Btn("Open folder", () => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Environment.GetFolderPath(Environment.SpecialFolder.Programs)}\"") { UseShellExecute = false })?.Dispose()));
 
         var layout = Section("Layout");
+        Row(layout, "App arrangement", "How \"All apps\" is laid out. Search results always show as a list, best match first.",
+            ComboCtl(new[]
+            {
+                (StartAppLayout.List, "List"), (StartAppLayout.Compact, "Compact list"), (StartAppLayout.Columns, "Two columns"),
+                (StartAppLayout.Grid, "Icon grid"), (StartAppLayout.Grouped, "Grouped A–Z")
+            }, S.StartAppLayout, v => S.StartAppLayout = v, 200));
         Row(layout, "Width", null, SliderCtl(S.StartMenuWidth, 320, 800, 10, "0 px", v => S.StartMenuWidth = v));
         Row(layout, "Height", null, SliderCtl(S.StartMenuHeight, 380, 1000, 10, "0 px", v => S.StartMenuHeight = v));
         Row(layout, "Show favorites", null, Toggle(S.StartShowFavorites, v => S.StartShowFavorites = v));

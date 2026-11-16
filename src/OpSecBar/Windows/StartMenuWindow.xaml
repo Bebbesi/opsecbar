@@ -6,20 +6,53 @@
     <local:FlyoutWindow.Resources>
         <!-- Riga dell'elenco "All apps" -->
         <DataTemplate x:Key="AppRowTemplate">
-            <StackPanel Orientation="Horizontal" Height="36">
-                <Grid Width="24" Height="24" Margin="8,0,12,0">
+            <DockPanel Height="36" Background="Transparent" ToolTip="{Binding Name}">
+                <Grid DockPanel.Dock="Left" Width="24" Height="24" Margin="8,0,12,0">
                     <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
                     <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
                         <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
                     </Rectangle>
                 </Grid>
-                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+            </DockPanel>
+        </DataTemplate>
+
+        <!-- Riga compatta: più app visibili senza scorrere -->
+        <DataTemplate x:Key="AppCompactTemplate">
+            <DockPanel Height="26" Background="Transparent" ToolTip="{Binding Name}">
+                <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="8,0,10,0">
+                    <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                    <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
+                        <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                    </Rectangle>
+                </Grid>
+                <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+            </DockPanel>
+        </DataTemplate>
+
+        <!-- Tessera della griglia: icona grande con il nome sotto -->
+        <DataTemplate x:Key="AppTileTemplate">
+            <StackPanel Height="80" Background="Transparent" ToolTip="{Binding Name}">
+                <Grid Width="32" Height="32" Margin="0,12,0,0">
+                    <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality" Opacity="{DynamicResource AppIconImageOpacity}" />
+                    <Rectangle Fill="{DynamicResource AppIconTintBrush}" Opacity="{DynamicResource AppIconTintOpacity}" Visibility="{DynamicResource AppIconTintVisibility}">
+                        <Rectangle.OpacityMask><ImageBrush ImageSource="{Binding Icon}" Stretch="Uniform" /></Rectangle.OpacityMask>
+                    </Rectangle>
+                </Grid>
+                <TextBlock Text="{Binding Name}" FontSize="11.5" Margin="4,7,4,0" TextAlignment="Center" TextTrimming="CharacterEllipsis" />
             </StackPanel>
+        </DataTemplate>
+
+        <!-- Intestazione dei gruppi per lettera -->
+        <DataTemplate x:Key="LetterHeaderTemplate">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Margin="10,10,0,4"
+                       Foreground="{DynamicResource AccentBrush}" />
         </DataTemplate>
 
         <Style x:Key="AppRowContainer" TargetType="ListBoxItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="AppRow_Click" />
             <EventSetter Event="MouseRightButtonUp" Handler="AppRow_RightClick" />
             <Setter Property="Template">
@@ -169,7 +202,8 @@
                 <ListBox x:Name="AppList" Grid.Row="1" Background="Transparent" BorderThickness="0"
                          ItemTemplate="{StaticResource AppRowTemplate}" ItemContainerStyle="{StaticResource AppRowContainer}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel"
-                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" />
+                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.IsVirtualizingWhenGrouping="True" />
                 <TextBlock x:Name="EmptyText" Grid.Row="1" Text="Loading apps…" HorizontalAlignment="Center" Margin="0,30,0,0"
                            Foreground="{DynamicResource PanelFgDimBrush}" />
             </Grid>

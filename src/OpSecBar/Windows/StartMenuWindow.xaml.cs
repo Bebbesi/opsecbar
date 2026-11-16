@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -55,6 +56,7 @@ public partial class StartMenuWindow : FlyoutWindow
         {
             RefreshFavorites();
             RefreshRecent();
+            ApplyFilter(); // la disposizione delle app (o la larghezza, da cui dipendono le colonne) può essere cambiata
         }
         base.ApplyTheme();
     }
@@ -115,12 +117,90 @@ public partial class StartMenuWindow : FlyoutWindow
                 .Select(x => x.App);
         }
         var list = result.ToList();
-        AppList.ItemsSource = list;
+        StartAppLayout layout = ApplyAppLayout(searching: query.Length > 0);
+        if (layout == StartAppLayout.Grouped)
+        {
+            var view = new ListCollectionView(list);
+            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(AppEntry.Name), LetterConverter.Instance));
+            AppList.ItemsSource = view;
+        }
+        else AppList.ItemsSource = list;
         if (query.Length > 0 && list.Count > 0) AppList.SelectedIndex = 0;
 
         EmptyText.Text = !_loaded ? "Loading apps…" : "No results";
         EmptyText.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateSections();
+    }
+
+    // ---- Disposizione delle app -----------------------------------------------------------------
+
+    private ItemsPanelTemplate? _listPanel;   // il pannello virtualizzato predefinito dell'elenco
+    private GroupStyle? _letterGroups;
+    private (StartAppLayout Layout, int Columns)? _appliedLayout;
+    private int _columns = 1;                 // colonne della disposizione attuale (per le frecce)
+
+    /// <summary>
+    /// Imposta modello, pannello e gruppi dell'elenco secondo la disposizione scelta nelle impostazioni.
+    /// I risultati della ricerca sono ordinati per pertinenza, quindi restano un elenco (compatto se lo è la disposizione).
+    /// </summary>
+    private StartAppLayout ApplyAppLayout(bool searching)
+    {
+        AppSettings s = _app.Settings;
+        StartAppLayout layout = Enum.IsDefined(s.StartAppLayout) ? s.StartAppLayout : StartAppLayout.List;
+        if (searching) layout = layout == StartAppLayout.Compact ? StartAppLayout.Compact : StartAppLayout.List;
+
+        // Larghezza utile dell'elenco: pannello meno i margini interni e la barra di scorrimento.
+        double width = Math.Clamp(s.StartMenuWidth, 320, 900) - 32 - SystemParameters.VerticalScrollBarWidth;
+        int columns = layout switch
+        {
+            StartAppLayout.Columns => 2,
+            StartAppLayout.Grid => Math.Max(2, (int)(width / 92)),
+            _ => 1
+        };
+        _columns = columns;
+        if (_appliedLayout == (layout, columns)) return layout;
+        _appliedLayout = (layout, columns);
+
+        _listPanel ??= AppList.ItemsPanel;
+        _letterGroups ??= new GroupStyle { HeaderTemplate = (DataTemplate)FindResource("LetterHeaderTemplate") };
+
+        AppList.ItemsSource = null; // niente contenitori vecchi da riciclare nel nuovo pannello
+        AppList.GroupStyle.Clear();
+        if (layout == StartAppLayout.Grouped) AppList.GroupStyle.Add(_letterGroups);
+
+        AppList.ItemTemplate = (DataTemplate)FindResource(layout switch
+        {
+            StartAppLayout.Compact => "AppCompactTemplate",
+            StartAppLayout.Grid => "AppTileTemplate",
+            _ => "AppRowTemplate"
+        });
+
+        if (columns > 1)
+        {
+            var grid = new FrameworkElementFactory(typeof(UniformGrid));
+            grid.SetValue(UniformGrid.ColumnsProperty, columns);
+            grid.SetValue(VerticalAlignmentProperty, VerticalAlignment.Top);
+            AppList.ItemsPanel = new ItemsPanelTemplate(grid);
+        }
+        else AppList.ItemsPanel = _listPanel;
+        return layout;
+    }
+
+    /// <summary>Lettera iniziale del nome (senza accenti) per i gruppi; "#" per cifre e simboli.</summary>
+    private sealed class LetterConverter : System.Windows.Data.IValueConverter
+    {
+        public static readonly LetterConverter Instance = new();
+
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            string name = (value as string ?? "").TrimStart();
+            if (name.Length == 0) return "#";
+            char c = char.ToUpperInvariant(name.Normalize(System.Text.NormalizationForm.FormD)[0]);
+            return char.IsLetter(c) ? c.ToString() : "#";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>0 = il nome o una sua parola inizia con la ricerca; 1 = la contiene a metà parola; -1 = nessuna corrispondenza.</summary>
@@ -221,11 +301,20 @@ public partial class StartMenuWindow : FlyoutWindow
                     Launch(app, AdminModifiers);
                 e.Handled = true;
                 break;
+            case Key.Left:
+            case Key.Right:
+                // Solo nelle disposizioni a più colonne, che non compaiono mai mentre si cerca: il cursore della ricerca resta libero.
+                if (_columns > 1 && SearchBox.Text.Length == 0) goto case Key.Down;
+                break;
             case Key.Down:
             case Key.Up:
                 if (AppList.Items.Count == 0) break;
-                int index = AppList.SelectedIndex + (e.Key == Key.Down ? 1 : -1);
-                AppList.SelectedIndex = Math.Clamp(index, 0, AppList.Items.Count - 1);
+                int current = AppList.SelectedIndex, last = AppList.Items.Count - 1;
+                int step = e.Key switch { Key.Down => _columns, Key.Up => -_columns, Key.Right => 1, _ => -1 };
+                int index = current < 0 ? 0 : current + step;
+                if (index < 0) index = current;                       // già sulla prima riga
+                if (index > last) index = step == 1 ? current : last; // ultima riga incompleta: si va all'ultima app
+                AppList.SelectedIndex = index;
                 AppList.ScrollIntoView(AppList.SelectedItem);
                 e.Handled = true;
                 break;

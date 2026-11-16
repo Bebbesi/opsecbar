@@ -148,6 +148,15 @@ public partial class TaskbarWindow : AppBarWindow
         }
 
         WidgetPanel.Margin = new Thickness(0, 6, 0, 6);
+        // Barra verticale: la lineetta "mostra desktop" sta in fondo, orizzontale.
+        DockPanel.SetDock(DesktopStrip, Dock.Bottom);
+        DesktopStrip.Width = double.NaN;
+        DesktopStrip.Height = 12;
+        DesktopLine.Width = double.NaN;
+        DesktopLine.Height = 1;
+        DesktopLine.Margin = new Thickness(7, 0, 7, 3);
+        DesktopLine.HorizontalAlignment = HorizontalAlignment.Stretch;
+        DesktopLine.VerticalAlignment = VerticalAlignment.Bottom;
         GifHost.Orientation = Orientation.Vertical;
         GifHost.HorizontalAlignment = HorizontalAlignment.Center;
         VolumePanel.Orientation = Orientation.Vertical;
@@ -216,6 +225,7 @@ public partial class TaskbarWindow : AppBarWindow
         StartButton.Visibility = Vis(_s.ShowStartButton);
         SysInfoText.Visibility = Vis(_s.ShowSysInfo);
         VolumeButton.Visibility = Vis(_s.ShowVolume);
+        DesktopStrip.Visibility = Vis(_s.ShowDesktopButton);
         ApplyClockLayout();
         _lastClock = "";
         UpdateClock();
@@ -1022,6 +1032,12 @@ public partial class TaskbarWindow : AppBarWindow
     {
         e.Handled = true;
         ShowBarMenu(StartButton);
+    }
+
+    private void DesktopStrip_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        TaskbarGuard.ToggleDesktop();
     }
 
     private void Bar_RightUp(object sender, MouseButtonEventArgs e)

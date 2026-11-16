@@ -83,6 +83,24 @@
         <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp">
             <!-- Gli elementi della barra. Zona (sinistra / centro / destra) e ordine di ciascuno sono assegnati da codice
                  (ApplyWidgetLayout): disposizione classica oppure quella scelta nel layout avanzato. -->
+            <DockPanel>
+            <!-- "Mostra desktop": la lineetta all'estremità della barra. Un click riduce a icona tutte le finestre,
+                 un altro le ripristina. Lato e orientamento li assegna il codice (ApplyLayout). -->
+            <Border x:Name="DesktopStrip" DockPanel.Dock="Right" Width="12" Background="Transparent" ToolTip="Show desktop"
+                    MouseLeftButtonUp="DesktopStrip_Click">
+                <Rectangle x:Name="DesktopLine" Width="1" Margin="0,7,3,7" HorizontalAlignment="Right" Fill="{DynamicResource FgBrush}">
+                    <Rectangle.Style>
+                        <Style TargetType="Rectangle">
+                            <Setter Property="Opacity" Value="0.35" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=DesktopStrip}" Value="True">
+                                    <Setter Property="Opacity" Value="1" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Rectangle.Style>
+                </Rectangle>
+            </Border>
             <c:BarPanel x:Name="WidgetPanel" Margin="6,0">
                 <!-- Icone delle app: l'unico elemento flessibile, scorre quando lo spazio non basta -->
                 <ScrollViewer x:Name="TasksScroll" c:BarPanel.Flex="True" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
@@ -140,6 +158,7 @@
                     </Canvas>
                 </Button>
             </c:BarPanel>
+            </DockPanel>
         </Border>
 
         <!-- Bordo animato (minimal o divertente): sopra la barra, non intercetta il mouse -->

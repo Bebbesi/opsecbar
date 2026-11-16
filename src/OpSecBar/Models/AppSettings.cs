@@ -26,6 +26,12 @@ public enum BarZone { Start, Center, End }
 /// </summary>
 public enum StartAppSource { StartMenuFolder, AllInstalled }
 
+/// <summary>
+/// Come il menu Start dispone le app di "All apps": elenco, elenco compatto, due colonne, griglia di tessere,
+/// oppure elenco raggruppato per lettera iniziale. I risultati della ricerca restano sempre un elenco ordinato.
+/// </summary>
+public enum StartAppLayout { List, Compact, Columns, Grid, Grouped }
+
 /// <summary>Disposizione degli elementi sulla barra: per ogni zona, gli elementi nell'ordine in cui compaiono.</summary>
 public class BarLayout
 {
@@ -212,16 +218,17 @@ public class AppSettings : ObservableObject
     private bool _showMediaPlayer = true, _showMediaTitle = true, _showClock = true, _showDate = true, _showSeconds;
     private bool _clock24h = true, _showTray = true, _showQuickSettings = true, _showStartButton = true, _showSysInfo;
     private bool _showRunningApps = true, _showPinnedApps = true, _groupWindows = true, _showWindowPreviews = true;
-    private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true, _preReleaseUpdates;
+    private bool _autoStart = true, _hideWindowsTaskbar = true, _autoUpdate = true, _preReleaseUpdates;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
     private bool _startShowFavorites = true, _startShowRecent = true, _startHideUserName, _useWinKey = true;
     private StartAppSource _startAppSource = StartAppSource.AllInstalled;
+    private StartAppLayout _startAppLayout = StartAppLayout.List;
     private bool _customCalendar = true, _customQuickSettings = true;
     private string _clockFormat = "", _dateFormat = "";
     private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
     private double _gifSize;
     private GifPlacement _gifPlacement = GifPlacement.Center;
-    private bool _advancedLayout;
+    private bool _advancedLayout, _showDesktopButton = true;
 
     public ThemeData Theme { get => _theme; set => Set(ref _theme, value); }
 
@@ -242,6 +249,8 @@ public class AppSettings : ObservableObject
     public bool ShowQuickSettings { get => _showQuickSettings; set => Set(ref _showQuickSettings, value); }
     public bool ShowStartButton { get => _showStartButton; set => Set(ref _showStartButton, value); }
     public bool ShowSysInfo { get => _showSysInfo; set => Set(ref _showSysInfo, value); }
+    /// <summary>Lineetta "mostra desktop" all'estremità della barra.</summary>
+    public bool ShowDesktopButton { get => _showDesktopButton; set => Set(ref _showDesktopButton, value); }
     public bool ShowRunningApps { get => _showRunningApps; set => Set(ref _showRunningApps, value); }
     public bool ShowPinnedApps { get => _showPinnedApps; set => Set(ref _showPinnedApps, value); }
     public bool GroupWindows { get => _groupWindows; set => Set(ref _groupWindows, value); }
@@ -287,6 +296,8 @@ public class AppSettings : ObservableObject
     public bool StartHideUserName { get => _startHideUserName; set => Set(ref _startHideUserName, value); }
     /// <summary>Quali app elenca il menu Start (predefinito: tutte le app installate).</summary>
     public StartAppSource StartAppSource { get => _startAppSource; set => Set(ref _startAppSource, value); }
+    /// <summary>Come sono disposte le app nell'elenco "All apps" del menu Start.</summary>
+    public StartAppLayout StartAppLayout { get => _startAppLayout; set => Set(ref _startAppLayout, value); }
     /// <summary>Il tasto Windows apre il menu Start di OpSecBar invece di quello di Windows.</summary>
     public bool UseWinKey { get => _useWinKey; set => Set(ref _useWinKey, value); }
 

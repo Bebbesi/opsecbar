@@ -47,6 +47,27 @@ public static class TaskbarGuard
     }
 
     /// <summary>
+    /// "Mostra desktop": riduce a icona tutte le finestre, e al secondo click le ripristina. È il comando della taskbar
+    /// di Explorer (lo stesso di Win+D), inviato direttamente alla sua finestra: anche nascosta lo esegue.
+    /// </summary>
+    public static void ToggleDesktop()
+    {
+        const uint WM_COMMAND = 0x0111;
+        const int ToggleDesktopCommand = 407;
+        IntPtr tray = FindPrimaryTaskbar();
+        if (tray != IntPtr.Zero && Native.PostMessage(tray, WM_COMMAND, (IntPtr)ToggleDesktopCommand, IntPtr.Zero)) return;
+
+        // Explorer non c'è (o non risponde): si passa dalla shell COM.
+        try
+        {
+            if (Type.GetTypeFromProgID("Shell.Application") is not { } type || Activator.CreateInstance(type) is not { } shell) return;
+            try { type.InvokeMember("ToggleDesktop", System.Reflection.BindingFlags.InvokeMethod, null, shell, null); }
+            finally { Marshal.FinalReleaseComObject(shell); }
+        }
+        catch { /* niente desktop da mostrare */ }
+    }
+
+    /// <summary>
     /// SHAppBarMessage recapita il messaggio alla prima finestra "Shell_TrayWnd" in ordine Z. Mentre OpSecBar è in
     /// esecuzione ne esiste una nostra (creata da ManagedShell per il tray) e, con la taskbar di Explorer spinta in
     /// fondo, è quella a ricevere la richiesta: lo stato di Explorer non verrebbe né letto né modificato.
