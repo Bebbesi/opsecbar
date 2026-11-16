@@ -116,11 +116,28 @@ public sealed class TaskListService
         });
     }
 
-    private static string WindowKey(ApplicationWindow w)
+    private string WindowKey(ApplicationWindow w)
     {
         if (w.IsUWP && !string.IsNullOrEmpty(w.AppUserModelID)) return "aumid:" + w.AppUserModelID.ToLowerInvariant();
-        string? file = w.WinFileName;
-        return string.IsNullOrEmpty(file) ? "hwnd:" + w.Handle : "exe:" + file.ToLowerInvariant();
+        string file = ExeOf(w);
+        if (file.Length > 0) return "exe:" + file.ToLowerInvariant();
+        // Processo non leggibile (es. un servizio elevato): le sue finestre si raggruppano comunque tra loro.
+        uint pid = w.ProcId ?? 0;
+        return pid != 0 ? "pid:" + pid : "hwnd:" + w.Handle;
+    }
+
+    private readonly Dictionary<IntPtr, string> _exePaths = new();
+
+    /// <summary>
+    /// Percorso dell'eseguibile della finestra, vuoto se il processo non è leggibile. Non si usa WinFileName di ManagedShell:
+    /// quando il processo non si può aprire restituisce memoria non inizializzata, che a volte è il percorso di un'altra
+    /// app chiesto poco prima, e la finestra finirebbe sotto l'icona sbagliata.
+    /// </summary>
+    public string ExeOf(ApplicationWindow w)
+    {
+        if (_exePaths.TryGetValue(w.Handle, out string? path)) return path;
+        try { path = Native.ProcessImagePath(w.ProcId ?? 0); } catch { path = null; }
+        return _exePaths[w.Handle] = path ?? "";
     }
 
     private readonly Dictionary<IntPtr, string> _appIds = new();
@@ -141,7 +158,7 @@ public sealed class TaskListService
     private bool Matches(PinnedApp pin, ApplicationWindow w)
     {
         if (!string.IsNullOrEmpty(pin.AppId) && string.Equals(pin.AppId, AppIdOf(w), StringComparison.OrdinalIgnoreCase)) return true;
-        string? file = w.WinFileName;
+        string file = ExeOf(w);
         if (string.IsNullOrEmpty(file)) return false;
         if (!string.IsNullOrEmpty(pin.TargetPath))
         {
@@ -170,6 +187,7 @@ public sealed class TaskListService
             gone.PropertyChanged -= OnWindowPropertyChanged;
             _hooked.Remove(gone);
             _appIds.Remove(gone.Handle);
+            _exePaths.Remove(gone.Handle);
         }
 
         var existing = Items.ToDictionary(i => i.Key);
@@ -235,7 +253,7 @@ public sealed class TaskListService
         if (DebugEnabled)
             foreach (var item in desired)
                 foreach (var w in item.Windows)
-                    Log.Info($"[tasks] {item.Key} <= '{w.Title}' exe='{w.WinFileName}' aumid='{w.AppUserModelID}' uwp={w.IsUWP}");
+                    Log.Info($"[tasks] {item.Key} <= '{w.Title}' exe='{ExeOf(w)}' aumid='{w.AppUserModelID}' uwp={w.IsUWP}");
     }
 
     internal static readonly bool DebugEnabled = Environment.GetEnvironmentVariable("OPSECBAR_DEBUG") == "1";
@@ -266,7 +284,7 @@ public sealed class TaskListService
     {
         if (item.IsPinned || item.Windows.Count == 0) return;
         var w = item.Windows[0];
-        string? file = w.WinFileName;
+        string file = ExeOf(w);
         // App in pacchetto (UWP o Win32 MSIX): si fissa l'AUMID, come fa il menu Start. Il percorso dell'eseguibile
         // contiene la versione e cambierebbe a ogni aggiornamento.
         string appId = AppIdOf(w);
@@ -377,7 +395,7 @@ public sealed class TaskListService
     {
         ApplicationWindow? w = item.Windows.FirstOrDefault();
         string? exe = item.Pin?.TargetPath;
-        if (string.IsNullOrEmpty(exe) && w is { IsUWP: false }) exe = w.WinFileName;
+        if (string.IsNullOrEmpty(exe) && w is { IsUWP: false }) exe = ExeOf(w);
         string? appId = item.Pin?.AppId;
         if (string.IsNullOrEmpty(appId) && w != null) appId = AppIdOf(w);
         string name = item.Pin?.Name is { Length: > 0 } pinName ? pinName : item.Title;
@@ -429,12 +447,12 @@ public sealed class TaskListService
         var w = item.Windows[0];
         if (w.IsUWP && !string.IsNullOrEmpty(w.AppUserModelID))
             AppCatalogService.Launch(new PinnedApp { Name = AppName(w), AppId = w.AppUserModelID });
-        else if (!string.IsNullOrEmpty(w.WinFileName))
-            AppCatalogService.Launch(new PinnedApp { Name = AppName(w), TargetPath = w.WinFileName }, asAdmin);
+        else if (ExeOf(w) is { Length: > 0 } exe)
+            AppCatalogService.Launch(new PinnedApp { Name = AppName(w), TargetPath = exe }, asAdmin);
     }
 
     /// <summary>Nome dell'app di una finestra (descrizione dell'eseguibile, non il titolo della finestra).</summary>
-    private static string AppName(ManagedShell.WindowsTasks.ApplicationWindow w) =>
-        !string.IsNullOrWhiteSpace(w.WinFileDescription) ? w.WinFileDescription
-        : !string.IsNullOrEmpty(w.WinFileName) ? System.IO.Path.GetFileNameWithoutExtension(w.WinFileName) : w.Title ?? "";
+    private string AppName(ManagedShell.WindowsTasks.ApplicationWindow w) =>
+        ExeOf(w) is not { Length: > 0 } exe ? w.Title ?? ""
+        : !string.IsNullOrWhiteSpace(w.WinFileDescription) ? w.WinFileDescription : System.IO.Path.GetFileNameWithoutExtension(exe);
 }

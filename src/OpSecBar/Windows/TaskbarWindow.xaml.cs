@@ -1400,7 +1400,7 @@ public partial class TaskbarWindow : AppBarWindow
         menu.Items.Add(MenuEntry(item.IsRunning ? "New window" : "Open", "", () => tasks.Launch(item)));
 
         bool hasExe = !string.IsNullOrEmpty(item.Pin?.TargetPath) ||
-                      (item.Pin == null && item.Windows.Count > 0 && !item.Windows[0].IsUWP && !string.IsNullOrEmpty(item.Windows[0].WinFileName));
+                      (item.Pin == null && item.Windows.Count > 0 && !item.Windows[0].IsUWP && tasks.ExeOf(item.Windows[0]).Length > 0);
         if (hasExe) menu.Items.Add(MenuEntry("Run as administrator", "", () => tasks.Launch(item, true)));
 
         menu.Items.Add(item.Pin is { } pin
