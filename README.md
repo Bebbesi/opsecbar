@@ -3,7 +3,7 @@
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)
 ![WPF](https://img.shields.io/badge/UI-WPF-5C2D91)
-![Version](https://img.shields.io/badge/version-1.1.5-2ea44f)
+![Version](https://img.shields.io/badge/version-1.1.6-2ea44f)
 
 **A minimal, fully customizable replacement taskbar for Windows 10 and 11, docked at the top by default.**
 Open TaskBar replaces the Windows taskbar visually and functionally **without ever killing Explorer**, and it restores the
