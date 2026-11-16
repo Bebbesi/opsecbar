@@ -1017,6 +1017,8 @@ public partial class SettingsWindow : Window
         Row(layout, "Show favorites", null, Toggle(S.StartShowFavorites, v => S.StartShowFavorites = v));
         Row(layout, "Show recent apps", "The last apps you opened from Open TaskBar. Search results also put the apps you opened most in the last 30 days first.",
             Toggle(S.StartShowRecent, v => S.StartShowRecent = v));
+        Row(layout, "Hide your name", "Shows **** instead of your user name at the bottom of the Start menu.",
+            Toggle(S.StartHideUserName, v => S.StartHideUserName = v));
 
         SectionHeader("Favorites", "Right-click an app in the Start menu to add it here.");
         var fav = Card();

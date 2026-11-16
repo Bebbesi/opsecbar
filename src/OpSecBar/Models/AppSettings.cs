@@ -214,8 +214,8 @@ public class AppSettings : ObservableObject
     private bool _showRunningApps = true, _showPinnedApps = true, _groupWindows = true, _showWindowPreviews = true;
     private bool _autoStart, _hideWindowsTaskbar = true, _autoUpdate = true, _preReleaseUpdates;
     private double _startMenuWidth = 420, _startMenuHeight = 600;
-    private bool _startShowFavorites = true, _startShowRecent = true, _useWinKey = true;
-    private StartAppSource _startAppSource = StartAppSource.StartMenuFolder;
+    private bool _startShowFavorites = true, _startShowRecent = true, _useWinKey = true, _startHideUserName;
+    private StartAppSource _startAppSource = StartAppSource.AllInstalled;
     private bool _customCalendar = true, _customQuickSettings = true;
     private string _clockFormat = "", _dateFormat = "";
     private bool _dateBelowTime, _showVolume = true, _showVolumePercent;
@@ -283,7 +283,9 @@ public class AppSettings : ObservableObject
     public bool StartShowFavorites { get => _startShowFavorites; set => Set(ref _startShowFavorites, value); }
     /// <summary>Sezione "Recent" del menu Start: le ultime app aperte da OpSecBar.</summary>
     public bool StartShowRecent { get => _startShowRecent; set => Set(ref _startShowRecent, value); }
-    /// <summary>Quali app elenca il menu Start (predefinito: la cartella "Start Menu\Programs" dell'utente).</summary>
+    /// <summary>Nel menu Start mostra "****" al posto del nome utente.</summary>
+    public bool StartHideUserName { get => _startHideUserName; set => Set(ref _startHideUserName, value); }
+    /// <summary>Quali app elenca il menu Start (predefinito: tutte le app installate).</summary>
     public StartAppSource StartAppSource { get => _startAppSource; set => Set(ref _startAppSource, value); }
     /// <summary>Il tasto Windows apre il menu Start di OpSecBar invece di quello di Windows.</summary>
     public bool UseWinKey { get => _useWinKey; set => Set(ref _useWinKey, value); }
