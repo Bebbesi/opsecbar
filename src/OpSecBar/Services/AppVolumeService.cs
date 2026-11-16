@@ -163,7 +163,9 @@ public static class AppVolumeService
         IAudioSessionEnumerator? sessions = null;
         try
         {
-            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+            // Stessa classe di AudioService: Core Audio restituisce lo stesso oggetto finché un enumeratore è vivo (il
+            // suo, tenuto per le notifiche), e .NET non lo lascia vedere attraverso due classi diverse.
+            enumerator = (IMMDeviceEnumerator)new AudioService.MMDeviceEnumeratorCom();
             if (enumerator.GetDefaultAudioEndpoint(0, 1, out device) != 0 || device == null) return;
             Guid iid = typeof(IAudioSessionManager2).GUID;
             if (device.Activate(ref iid, 0x17, IntPtr.Zero, out object? o) != 0) return;
@@ -185,7 +187,8 @@ public static class AppVolumeService
         catch (Exception ex) { Log.Warn("Volume app: " + ex.Message); }
         finally
         {
-            foreach (object? com in new object?[] { sessions, manager, device, enumerator })
+            // L'enumeratore non si rilascia a mano: può essere quello che AudioService sta usando.
+            foreach (object? com in new object?[] { sessions, manager, device })
                 if (com != null) try { Marshal.ReleaseComObject(com); } catch { }
         }
     }
@@ -229,9 +232,6 @@ public static class AppVolumeService
     }
 
     // ---- COM -------------------------------------------------------------------------------
-
-    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    private class MMDeviceEnumeratorCom { }
 
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IMMDeviceEnumerator
