@@ -30,7 +30,7 @@ public class FlyoutWindow : Window
     private IntPtr _hwnd;
     private bool _forceClose, _revealed;
     private BackdropWindow? _backdrop;
-    private DateTime _hiddenAt = DateTime.MinValue;
+    private DateTime _hiddenAt = DateTime.MinValue, _shownAt = DateTime.MinValue;
     private int _openSeq;
 
     public FlyoutWindow(App app)
@@ -49,7 +49,23 @@ public class FlyoutWindow : Window
         SetResourceReference(ForegroundProperty, "PanelFgBrush");
 
         SourceInitialized += (_, _) => _hwnd = new WindowInteropHelper(this).Handle;
-        Deactivated += (_, _) => HideFlyout();
+        Deactivated += (_, _) =>
+        {
+            // Appena aperto sopra un gioco a schermo intero, la barra che torna in primo piano può togliere per un
+            // attimo l'attivazione al pannello: non è l'utente che ha cliccato altrove, ci si riprende il primo piano.
+            if (IsVisible && Bar != null && (DateTime.Now - _shownAt).TotalMilliseconds < 500
+                && Native.GetForegroundWindow() != _hwnd && Mouse.LeftButton != MouseButtonState.Pressed)
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+                {
+                    if (!IsVisible) return;
+                    Activate();
+                    Native.ForceForeground(_hwnd);
+                });
+                return;
+            }
+            HideFlyout();
+        };
         // Un pannello alto quanto il contenuto può cambiare altezza mentre è aperto: resta agganciato alla barra.
         SizeChanged += (_, _) =>
         {
@@ -109,12 +125,15 @@ public class FlyoutWindow : Window
         // vecchia posizione). La si tiene "occultata" (DWM cloak) finché WPF non ha disegnato il nuovo fotogramma trasparente.
         if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(this).EnsureHandle();
         Cloak(true);
+        // Prima di mostrare il pannello: la barra risale sopra un'eventuale app a schermo intero senza poi rubargli il fuoco.
+        bar.NotifyFlyoutStateChanged(true);
+        _shownAt = DateTime.Now;
         Show();
         PositionNearAnchor();
         Activate();
         Native.ForceForeground(_hwnd); // necessario quando il pannello è aperto da tastiera
         OnOpened();
-        bar.NotifyAutoHideStateChanged();
+        bar.NotifyFlyoutStateChanged(true);
 
         // Dopo il primo layout (e l'eventuale cambio DPI del monitor) si riposiziona; un paio di fotogrammi dopo, quando
         // il contenuto trasparente è davvero sullo schermo, si scopre la finestra e parte la breve animazione.
@@ -170,7 +189,7 @@ public class FlyoutWindow : Window
         StopSlide();
         _backdrop?.Hide();
         Hide();
-        Bar?.NotifyAutoHideStateChanged();
+        Bar?.NotifyFlyoutStateChanged(false);
         OnHidden();
     }
 

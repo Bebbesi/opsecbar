@@ -546,7 +546,7 @@ public partial class TaskbarWindow : AppBarWindow
 
     protected override void OnFullScreenEnter(FullScreenApp app)
     {
-        if (!_s.HideOnFullscreen) return;
+        if (!_s.HideOnFullscreen || _flyoutOpen) return;
         base.OnFullScreenEnter(app);
         UpdateShape();
     }
@@ -562,7 +562,8 @@ public partial class TaskbarWindow : AppBarWindow
         if (Handle == IntPtr.Zero || IsClosing) return;
         try
         {
-            FullScreenApp? app = _s.HideOnFullscreen
+            // Con un pannello aperto (menu Start dal tasto Windows) la barra resta sopra il gioco finché non si chiude.
+            FullScreenApp? app = _s.HideOnFullscreen && !_flyoutOpen
                 ? _fullScreenHelper.FullScreenApps.FirstOrDefault(a => a.screen.IsVirtualScreen || a.screen.DeviceName == Screen.DeviceName)
                 : null;
             if (app != null && Topmost) OnFullScreenEnter(app);
@@ -633,6 +634,19 @@ public partial class TaskbarWindow : AppBarWindow
 
     /// <summary>Chiamato quando il menu Start si apre o si chiude (influenza l'auto-hide).</summary>
     public void NotifyAutoHideStateChanged() => OnPropertyChanged(nameof(AllowAutoHide));
+
+    private bool _flyoutOpen;
+
+    /// <summary>
+    /// Un pannello si è aperto o chiuso su questa barra. Mentre è aperto la barra torna in primo piano anche sopra
+    /// un'app a schermo intero (il tasto Windows in gioco mostra menu Start *e* barra); alla chiusura torna sotto.
+    /// </summary>
+    public void NotifyFlyoutStateChanged(bool open)
+    {
+        _flyoutOpen = open;
+        NotifyAutoHideStateChanged();
+        SyncFullScreenState();
+    }
 
     public PlacementMode PopupPlacement => AppBarEdge switch
     {
