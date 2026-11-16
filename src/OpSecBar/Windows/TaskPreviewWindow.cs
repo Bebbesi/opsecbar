@@ -223,7 +223,7 @@ internal sealed class TaskPreviewWindow : Window
 
     private void CloseWindow(Card card)
     {
-        try { card.Window.Close(); } catch (Exception ex) { Log.Error("Anteprima: chiusura", ex); }
+        try { App.Instance.TaskList.CloseWindow(card.Window); } catch (Exception ex) { Log.Error("Anteprima: chiusura", ex); }
         if (_peekCandidate == card) SetPeekCandidate(null);
         if (_dragCandidate == card) SetDragCandidate(null);
         Unregister(card);

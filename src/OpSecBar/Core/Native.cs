@@ -60,6 +60,9 @@ internal static class Native
         finally { CloseHandle(process); }
     }
 
+    /// <summary>Chiede a Windows di chiudere la finestra; arriva anche a quelle di processi con privilegi più alti del nostro.</summary>
+    [DllImport("user32.dll")] public static extern bool EndTask(IntPtr hWnd, bool shutdown, bool force);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] public static extern int GetWindowLong(IntPtr hWnd, int index);
     public const int GWL_EXSTYLE = -20, WS_EX_TOPMOST = 0x8;
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);

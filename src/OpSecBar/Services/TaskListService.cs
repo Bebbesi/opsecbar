@@ -333,6 +333,27 @@ public sealed class TaskListService
         }
     }
 
+    // ---- Chiusura finestre ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Chiude la finestra. Ai processi con privilegi più alti del nostro (elevati, o avviati da un servizio) Windows non
+    /// recapita il normale messaggio di chiusura: per quelli si passa da EndTask, che ci arriva.
+    /// </summary>
+    public void CloseWindow(ApplicationWindow w)
+    {
+        if (ExeOf(w).Length > 0)
+        {
+            w.Close();
+            return;
+        }
+        IntPtr handle = w.Handle;
+        Task.Run(() =>
+        {
+            try { if (!Native.EndTask(handle, false, false)) Log.Warn("Chiusura finestra protetta non riuscita"); }
+            catch (Exception ex) { Log.Error("Chiusura finestra protetta", ex); }
+        });
+    }
+
     // ---- Termina attività --------------------------------------------------------------------------
 
     // Processi che ospitano finestre di altri (o la shell stessa): terminarli farebbe danni ben oltre l'app scelta.
@@ -375,7 +396,7 @@ public sealed class TaskListService
             using var process = KillableProcessOf(w);
             if (process == null)
             {
-                try { w.Close(); } catch { } // processo condiviso: si chiude solo la finestra
+                try { CloseWindow(w); } catch { } // processo condiviso: si chiude solo la finestra
                 continue;
             }
             if (!done.Add(process.Id)) continue;
@@ -384,7 +405,13 @@ public sealed class TaskListService
                 Log.Info($"End task: {process.ProcessName} ({process.Id})");
                 process.Kill(entireProcessTree: true);
             }
-            catch (Exception ex) { Log.Warn($"End task fallito per {process.ProcessName}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                // Processo che non possiamo terminare (privilegi più alti): si chiede a Windows di chiuderne la finestra.
+                Log.Warn($"End task fallito per {process.ProcessName}: {ex.Message}");
+                IntPtr handle = w.Handle;
+                Task.Run(() => { try { Native.EndTask(handle, false, true); } catch { } });
+            }
         }
     }
 

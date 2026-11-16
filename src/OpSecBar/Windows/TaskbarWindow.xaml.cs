@@ -1415,12 +1415,12 @@ public partial class TaskbarWindow : AppBarWindow
                 ApplicationWindow w = item.Windows[0];
                 if (w.CanMinimize) menu.Items.Add(MenuEntry("Minimize", "", w.Minimize));
                 menu.Items.Add(MenuEntry("Maximize", "", w.Maximize));
-                menu.Items.Add(MenuEntry("Close window", "", w.Close));
+                menu.Items.Add(MenuEntry("Close window", "", () => tasks.CloseWindow(w)));
             }
             else
             {
                 var all = item.Windows.ToList();
-                menu.Items.Add(MenuEntry($"Close all windows ({all.Count})", "", () => { foreach (var w in all) w.Close(); }));
+                menu.Items.Add(MenuEntry($"Close all windows ({all.Count})", "", () => { foreach (var w in all) tasks.CloseWindow(w); }));
             }
             // Chiusura forzata del processo, per le app che non rispondono.
             if (tasks.CanEndTask(item)) menu.Items.Add(MenuEntry("End task", "", () => tasks.EndTask(item)));
