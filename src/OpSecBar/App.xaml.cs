@@ -268,7 +268,8 @@ public partial class App : Application
             {
                 _recreateTimer!.Stop();
                 if (_exiting) return;
-                if (_recreateOnlyIfScreensChanged && ScreenLayout() == _screenLayout)
+                string layout = ScreenLayout();
+                if (_recreateOnlyIfScreensChanged && layout == _screenLayout)
                 {
                     foreach (TaskbarWindow bar in _bars)
                     {
@@ -276,10 +277,15 @@ public partial class App : Application
                     }
                     return;
                 }
+                if (_recreateOnlyIfScreensChanged) Log.Info($"Schermi cambiati, barre ricreate: {_screenLayout} -> {layout}");
                 CloseTaskbars();
                 OpenTaskbars();
             };
         }
+        // Dopo un cambio di schermi si aspetta che la disposizione si assesti: collegando un visore, Virtual Desktop
+        // aggiunge i suoi monitor virtuali e cambia risoluzione in più passaggi, e ricreare le barre a ogni passaggio
+        // (con la registrazione presso Explorer che a volte blocca la UI) le rendeva inutilizzabili.
+        _recreateTimer.Interval = TimeSpan.FromMilliseconds(_recreateOnlyIfScreensChanged ? 1200 : 350);
         _recreateTimer.Stop();
         _recreateTimer.Start();
     }

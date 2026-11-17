@@ -84,6 +84,7 @@ public partial class TaskbarWindow : AppBarWindow
         // intero la si rimette in fondo.
         ContentRendered += (_, _) => { if (!Topmost && Handle != IntPtr.Zero) WindowHelper.ShowWindowBottomMost(Handle); };
         IsVisibleChanged += (_, _) => ScheduleShapeUpdate();
+        _fullScreenHelper.FullScreenApps.CollectionChanged += OnFullScreenAppsChanged;
         _previewShowTimer.Tick += (_, _) =>
         {
             _previewShowTimer.Stop();
@@ -106,6 +107,7 @@ public partial class TaskbarWindow : AppBarWindow
         {
             EndIconDrag();
             HidePreview();
+            _fullScreenHelper.FullScreenApps.CollectionChanged -= OnFullScreenAppsChanged;
             _clock.Stop();
             Microsoft.Win32.SystemEvents.TimeChanged -= OnSystemTimeChanged;
             Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
@@ -557,9 +559,28 @@ public partial class TaskbarWindow : AppBarWindow
     protected override void OnFullScreenEnter(FullScreenApp app)
     {
         if (!_s.HideOnFullscreen || _flyoutOpen) return;
+        // La classe base prende la prima app dello schermo: se è una da ignorare (streaming VR) si guarda se ce n'è un'altra.
+        if (FullScreenFilter.IsIgnored(app))
+        {
+            if (FullScreenAppOnThisScreen() is not { } other) return;
+            app = other;
+        }
+        FullScreenFilter.LogEnter(app, Screen.DeviceName);
         base.OnFullScreenEnter(app);
         UpdateShape();
     }
+
+    /// <summary>La prima app a schermo intero su questo schermo che deve far cedere il posto alla barra.</summary>
+    private FullScreenApp? FullScreenAppOnThisScreen() =>
+        _fullScreenHelper.FullScreenApps.FirstOrDefault(a =>
+            (a.screen.IsVirtualScreen || a.screen.DeviceName == Screen.DeviceName) && !FullScreenFilter.IsIgnored(a));
+
+    /// <summary>
+    /// Dopo che la classe base ha reagito a un cambio della lista: se sullo schermo resta solo un'app da ignorare, la
+    /// base lascerebbe la barra in fondo (torna su solo a lista vuota per questo schermo). Si riallinea con il filtro.
+    /// </summary>
+    private void OnFullScreenAppsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, SyncFullScreenState);
 
     /// <summary>
     /// Allinea la barra alle app a schermo intero già note. La classe base reagisce solo quando la lista *cambia*:
@@ -573,9 +594,7 @@ public partial class TaskbarWindow : AppBarWindow
         try
         {
             // Con un pannello aperto (menu Start dal tasto Windows) la barra resta sopra il gioco finché non si chiude.
-            FullScreenApp? app = _s.HideOnFullscreen && !_flyoutOpen
-                ? _fullScreenHelper.FullScreenApps.FirstOrDefault(a => a.screen.IsVirtualScreen || a.screen.DeviceName == Screen.DeviceName)
-                : null;
+            FullScreenApp? app = _s.HideOnFullscreen && !_flyoutOpen ? FullScreenAppOnThisScreen() : null;
             if (app != null && Topmost) OnFullScreenEnter(app);
             else if (app == null && !Topmost) OnFullScreenLeave();
         }
