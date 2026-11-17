@@ -13,6 +13,7 @@ public static class Program
     ///   OpSecBar.exe                 avvia la taskbar
     ///   OpSecBar.exe --restore       chiude OpSecBar (se attivo) e ripristina la taskbar di Windows
     ///   OpSecBar.exe --watchdog PID  (interno) ripristina la taskbar se il processo PID termina in modo anomalo
+    ///   OpSecBar.exe --mock-crash    mostra il popup di segnalazione crash con un rapporto finto (prova)
     /// </summary>
     [STAThread]
     public static int Main(string[] args)
@@ -37,8 +38,18 @@ public static class Program
             return 0;
         }
 
+        if (args.Length >= 1 && args[0] == "--mock-crash")
+        {
+            MockCrash();
+            return 0;
+        }
+
         return RunApp();
     }
+
+    /// <summary>OpSecBar.exe --mock-crash: mostra il popup di segnalazione crash con un rapporto finto, senza avviare la barra.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void MockCrash() => OpSecBar.Windows.CrashPrompt.Mock();
 
     // Metodo separato: così le modalità leggere non caricano WPF.
     [MethodImpl(MethodImplOptions.NoInlining)]

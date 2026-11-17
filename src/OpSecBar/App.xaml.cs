@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using ManagedShell;
@@ -164,6 +164,18 @@ public partial class App : Application
                 CheckForUpdates(Settings.AutoUpdate);
             };
             updateCheck.Start();
+
+            // L'ultima volta l'app è caduta: appena la barra è comparsa si chiede se segnalarlo.
+            if (CrashReport.Pending)
+            {
+                var crashPrompt = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                crashPrompt.Tick += (_, _) =>
+                {
+                    crashPrompt.Stop();
+                    AskToReportCrash();
+                };
+                crashPrompt.Start();
+            }
 
             // A regime la barra usa pochissima memoria: dopo l'avvio si restituiscono a Windows le pagine non più usate.
             var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
@@ -635,6 +647,7 @@ public partial class App : Application
         {
             bool restart = Environment.TickCount64 - _startedAt > 60_000;
             Log.Error(restart ? "Rendering di WPF interrotto: riavvio la barra" : "Rendering di WPF interrotto subito dopo l'avvio: esco");
+            CrashReport.Record("WPF render thread failure", e.Exception);
             ExitApp(restart);
             return;
         }
@@ -645,8 +658,14 @@ public partial class App : Application
         if (++_recentErrors >= 8)
         {
             Log.Error("Troppi errori consecutivi: esco e ripristino la taskbar di Windows");
+            CrashReport.Record("Too many errors in a row", e.Exception);
             ExitApp();
         }
+    }
+
+    private void AskToReportCrash()
+    {
+        if (!_exiting) CrashPrompt.Ask();
     }
 
     private static bool IsRenderThreadFailure(Exception? ex)
@@ -659,6 +678,7 @@ public partial class App : Application
     private void OnFatalException(object sender, UnhandledExceptionEventArgs e)
     {
         Log.Error("Eccezione fatale", e.ExceptionObject as Exception);
+        CrashReport.Record("Unhandled exception", e.ExceptionObject as Exception);
         TaskbarGuard.RestoreWindowsTaskbar();
     }
 }

@@ -1,0 +1,24 @@
+name: Crash report
+description: Open TaskBar crashed. The crash popup opens this form; attach the latest.log it saved.
+title: "Crash report"
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Filled in by the crash popup. Pre-release builds include the build tag, e.g. 1.1.6 (b20261117).
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What were you doing when it crashed?
+      description: Anything you remember helps, e.g. "opened the Start menu", "connected a second monitor".
+  - type: textarea
+    id: log
+    attributes:
+      label: Crash log
+      description: Drag the latest.log file you saved into this box.
+    validations:
+      required: true

@@ -259,12 +259,25 @@ public static class TaskbarGuard
     /// <summary>Corpo del processo watchdog: aspetta la fine del processo principale e ripristina la taskbar.</summary>
     public static int RunWatchdog(int parentPid)
     {
+        int? exitCode = null;
         try
         {
             using var parent = Process.GetProcessById(parentPid);
+            // L'handle va aperto finché il processo è vivo: a processo finito il PID non si apre più e il codice d'uscita
+            // non sarebbe leggibile.
+            _ = parent.SafeHandle;
             parent.WaitForExit();
+            exitCode = parent.ExitCode;
         }
         catch { /* il processo è già terminato */ }
+
+        // Crash in cui l'app non è riuscita a scrivere il rapporto (nativo, stack overflow...): lo scrive il watchdog.
+        // Se l'app l'ha già scritto (eccezione .NET) si tiene il suo, che contiene l'eccezione.
+        if (exitCode is int code && CrashReport.IsCrashExitCode(code))
+        {
+            Log.Warn($"Watchdog: OpSecBar è caduto (codice di uscita 0x{code:X8})");
+            CrashReport.Record($"Process ended with exit code 0x{code:X8}", overwrite: false);
+        }
 
         Thread.Sleep(400);
 
