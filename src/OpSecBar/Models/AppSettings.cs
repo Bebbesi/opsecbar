@@ -32,63 +32,174 @@ public enum StartAppSource { StartMenuFolder, AllInstalled }
 /// </summary>
 public enum StartAppLayout { List, Compact, Columns, Grid, Grouped }
 
-/// <summary>Disposizione degli elementi sulla barra: per ogni zona, gli elementi nell'ordine in cui compaiono.</summary>
+/// <summary>Widget che si possono aggiungere alla barra, anche più volte (es. più orologi del mondo).</summary>
+public enum ExtraWidgetKind { Text, WorldClock, NetworkSpeed, Cpu, Memory, Battery, Disk, Uptime, Shortcut, Timer, Separator, Spacer }
+
+/// <summary>
+/// Un widget aggiunto alla barra. Ogni istanza ha le sue opzioni; quelle che non riguardano il suo tipo restano
+/// ai valori predefiniti e vengono ignorate.
+/// </summary>
+public class ExtraWidget
+{
+    /// <summary>Identificativo usato nel layout. Non coincide mai con il nome di un elemento predefinito.</summary>
+    public string Id { get; set; } = NewId();
+    /// <summary>Un tipo sconosciuto (aggiunto da una versione più recente) non rende illeggibile il file: il widget viene scartato.</summary>
+    [JsonConverter(typeof(TolerantEnumConverter<ExtraWidgetKind>))]
+    public ExtraWidgetKind Kind { get; set; }
+    /// <summary>Il testo del widget Testo; per gli altri, un'etichetta prima del valore (vuoto = nessuna).</summary>
+    public string Label { get; set; } = "";
+    /// <summary>Collegamento: app, file, cartella, indirizzo web o comando. Spazio su disco: l'unità (es. "C:\").</summary>
+    public string Target { get; set; } = "";
+    /// <summary>Orologio del mondo: id del fuso orario di Windows (es. "Tokyo Standard Time").</summary>
+    public string TimeZone { get; set; } = "";
+    /// <summary>Orologio del mondo: formato .NET dell'ora (vuoto = come l'orologio della barra, 24 o 12 ore).</summary>
+    public string Format { get; set; } = "";
+    /// <summary>Colore del testo e dell'icona (vuoto = colori della barra).</summary>
+    public string Color { get; set; } = "";
+    public bool ShowIcon { get; set; } = true;
+    /// <summary>Spaziatore: larghezza in px (altezza sulle barre verticali).</summary>
+    public double Width { get; set; } = 16;
+    /// <summary>Timer: durata del conto alla rovescia in minuti (0 = cronometro).</summary>
+    public double Minutes { get; set; } = 25;
+
+    public static string NewId() => "w" + Guid.NewGuid().ToString("N")[..10];
+
+    /// <summary>Un nuovo widget del tipo indicato, con opzioni iniziali sensate.</summary>
+    public static ExtraWidget Create(ExtraWidgetKind kind)
+    {
+        var widget = new ExtraWidget { Kind = kind };
+        switch (kind)
+        {
+            case ExtraWidgetKind.Text:
+                widget.Label = "Hello";
+                widget.ShowIcon = false;
+                break;
+            case ExtraWidgetKind.WorldClock:
+                widget.TimeZone = "UTC";
+                break;
+            case ExtraWidgetKind.NetworkSpeed:
+                widget.ShowIcon = false; // le frecce di download e upload bastano
+                break;
+            case ExtraWidgetKind.Disk:
+                widget.Target = System.IO.Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
+                break;
+        }
+        return widget;
+    }
+}
+
+/// <summary>
+/// Disposizione degli elementi sulla barra: per ogni zona, gli elementi nell'ordine in cui compaiono. Ogni elemento è
+/// una chiave: il nome di un elemento predefinito (<see cref="BarWidget"/>) oppure l'Id di un <see cref="ExtraWidget"/>.
+/// </summary>
 public class BarLayout
 {
-    public List<BarWidget> Start { get; set; } = new();
-    public List<BarWidget> Center { get; set; } = new();
-    public List<BarWidget> End { get; set; } = new();
+    public List<string> StartItems { get; set; } = new();
+    public List<string> CenterItems { get; set; } = new();
+    public List<string> EndItems { get; set; } = new();
 
-    public List<BarWidget> this[BarZone zone] => zone switch
+    public List<string> this[BarZone zone] => zone switch
     {
-        BarZone.Start => Start,
-        BarZone.Center => Center,
-        _ => End
+        BarZone.Start => StartItems,
+        BarZone.Center => CenterItems,
+        _ => EndItems
     };
+
+    // Formato delle versioni fino alla 1.1.6: le stesse zone con i soli elementi predefiniti. Lo si legge dai file
+    // salvati da quelle versioni e lo si scrive ancora: tornando a una di esse (es. lasciando le pre-release) il file
+    // resta leggibile e la disposizione degli elementi predefiniti non si perde.
+    // Gli elementi sconosciuti (aggiunti da versioni più recenti) si saltano invece di rendere illeggibile il file.
+    private readonly List<BarWidget>?[] _legacy = new List<BarWidget>?[3];
+    [JsonPropertyName("Start"), JsonConverter(typeof(TolerantEnumListConverter<BarWidget>))]
+    public List<BarWidget> LegacyStart { get => BuiltIns(StartItems); set => _legacy[0] = value; }
+    [JsonPropertyName("Center"), JsonConverter(typeof(TolerantEnumListConverter<BarWidget>))]
+    public List<BarWidget> LegacyCenter { get => BuiltIns(CenterItems); set => _legacy[1] = value; }
+    [JsonPropertyName("End"), JsonConverter(typeof(TolerantEnumListConverter<BarWidget>))]
+    public List<BarWidget> LegacyEnd { get => BuiltIns(EndItems); set => _legacy[2] = value; }
+
+    private static List<BarWidget> BuiltIns(List<string> keys)
+    {
+        var list = new List<BarWidget>();
+        foreach (string key in keys)
+            if (TryBuiltIn(key, out BarWidget widget)) list.Add(widget);
+        return list;
+    }
+
+    public static string Key(BarWidget widget) => widget.ToString();
+
+    /// <summary>Vero se la chiave è un elemento predefinito (e non l'Id di un widget aggiunto).</summary>
+    public static bool TryBuiltIn(string? key, out BarWidget widget)
+    {
+        widget = default;
+        return key != null && Enum.TryParse(key, false, out widget) && Enum.IsDefined(widget) && widget.ToString() == key;
+    }
+
+    public static bool IsBuiltIn(string? key) => TryBuiltIn(key, out _);
+
+    private static BarLayout Make(BarWidget[] start, BarWidget[] center, BarWidget[] end)
+    {
+        var layout = new BarLayout();
+        layout.StartItems.AddRange(start.Select(Key));
+        layout.CenterItems.AddRange(center.Select(Key));
+        layout.EndItems.AddRange(end.Select(Key));
+        return layout;
+    }
 
     /// <summary>Disposizione classica: app a sinistra, player al centro, sistema a destra; le GIF dove indicato.</summary>
     public static BarLayout Default(GifPlacement gifs = GifPlacement.Center)
     {
-        var layout = new BarLayout
-        {
-            Start = { BarWidget.Apps },
-            Center = { BarWidget.Media },
-            End = { BarWidget.SysInfo, BarWidget.Volume, BarWidget.Clock, BarWidget.Tray, BarWidget.QuickSettings, BarWidget.Start }
-        };
+        var layout = Make(
+            new[] { BarWidget.Apps },
+            new[] { BarWidget.Media },
+            new[] { BarWidget.SysInfo, BarWidget.Volume, BarWidget.Clock, BarWidget.Tray, BarWidget.QuickSettings, BarWidget.Start });
+        string gif = Key(BarWidget.Gifs);
         switch (gifs)
         {
-            case GifPlacement.Left: layout.Start.Insert(0, BarWidget.Gifs); break;
-            case GifPlacement.Right: layout.End.Insert(0, BarWidget.Gifs); break;
-            default: layout.Center.Add(BarWidget.Gifs); break;
+            case GifPlacement.Left: layout.StartItems.Insert(0, gif); break;
+            case GifPlacement.Right: layout.EndItems.Insert(0, gif); break;
+            default: layout.CenterItems.Add(gif); break;
         }
         return layout;
     }
 
     /// <summary>Stile Windows 11: Start e app al centro, sistema a destra, player a sinistra.</summary>
-    public static BarLayout Centered() => new()
-    {
-        Start = { BarWidget.Media, BarWidget.Gifs },
-        Center = { BarWidget.Start, BarWidget.Apps },
-        End = { BarWidget.SysInfo, BarWidget.Tray, BarWidget.Volume, BarWidget.QuickSettings, BarWidget.Clock }
-    };
+    public static BarLayout Centered() => Make(
+        new[] { BarWidget.Media, BarWidget.Gifs },
+        new[] { BarWidget.Start, BarWidget.Apps },
+        new[] { BarWidget.SysInfo, BarWidget.Tray, BarWidget.Volume, BarWidget.QuickSettings, BarWidget.Clock });
 
     /// <summary>
     /// Garantisce che ogni elemento compaia una e una sola volta (file modificato a mano, elementi aggiunti da una
-    /// versione più recente): i doppioni spariscono, i mancanti tornano nella loro zona predefinita.
+    /// versione più recente): i doppioni e le chiavi sconosciute spariscono, gli elementi predefiniti mancanti tornano
+    /// nella loro zona predefinita. <paramref name="extraIds"/> sono gli Id dei widget aggiunti che esistono.
     /// </summary>
-    public void Normalize()
+    public void Normalize(ICollection<string> extraIds)
     {
-        Start ??= new();
-        Center ??= new();
-        End ??= new();
-        var seen = new HashSet<BarWidget>();
+        StartItems ??= new();
+        CenterItems ??= new();
+        EndItems ??= new();
+        // File salvato da una versione precedente: si parte dai suoi elenchi.
+        if (StartItems.Count + CenterItems.Count + EndItems.Count == 0)
+            foreach (BarZone zone in Enum.GetValues<BarZone>())
+                if (_legacy[(int)zone] is { } old) this[zone].AddRange(old.Select(Key));
+        Array.Clear(_legacy);
+
+        var seen = new HashSet<string>();
         foreach (BarZone zone in Enum.GetValues<BarZone>())
-            this[zone].RemoveAll(w => !Enum.IsDefined(w) || !seen.Add(w));
+            this[zone].RemoveAll(k => k == null || !(IsBuiltIn(k) || extraIds.Contains(k)) || !seen.Add(k));
 
         BarLayout fallback = Default();
         foreach (BarZone zone in Enum.GetValues<BarZone>())
-            foreach (BarWidget w in fallback[zone])
-                if (seen.Add(w)) this[zone].Add(w);
+            foreach (string key in fallback[zone])
+                if (seen.Add(key)) this[zone].Add(key);
+    }
+
+    /// <summary>Zona in cui si trova un elemento (null se non c'è).</summary>
+    public BarZone? ZoneOf(string key)
+    {
+        foreach (BarZone zone in Enum.GetValues<BarZone>())
+            if (this[zone].Contains(key)) return zone;
+        return null;
     }
 }
 
@@ -278,6 +389,53 @@ public class AppSettings : ObservableObject
     /// <summary>La disposizione da usare adesso: quella personalizzata, oppure quella classica.</summary>
     [JsonIgnore] public BarLayout EffectiveLayout => AdvancedLayout && Layout != null ? Layout : BarLayout.Default(GifPlacement);
 
+    /// <summary>Widget aggiunti alla barra (orologi del mondo, misuratori, collegamenti...). La posizione la dà <see cref="Layout"/>.</summary>
+    public List<ExtraWidget> ExtraWidgets { get; set; } = new();
+    /// <summary>I widget aggiunti che si vedono adesso: solo con il layout avanzato (quello classico non li prevede).</summary>
+    [JsonIgnore] public IReadOnlyList<ExtraWidget> ShownExtraWidgets =>
+        AdvancedLayout && Layout != null ? ExtraWidgets : Array.Empty<ExtraWidget>();
+    /// <summary>CPU, memoria, batteria o rete servono al monitor di sistema o a qualche widget aggiunto.</summary>
+    [JsonIgnore] public bool NeedsSystemInfo => ShowSysInfo || ShownExtraWidgets.Any(w =>
+        w.Kind is ExtraWidgetKind.Cpu or ExtraWidgetKind.Memory or ExtraWidgetKind.Battery or ExtraWidgetKind.NetworkSpeed);
+    [JsonIgnore] public bool NeedsNetworkSpeed => ShownExtraWidgets.Any(w => w.Kind == ExtraWidgetKind.NetworkSpeed);
+
+    public ExtraWidget? FindExtraWidget(string id) => ExtraWidgets.FirstOrDefault(w => w.Id == id);
+
+    /// <summary>
+    /// Aggiunge un widget in una zona, alla posizione indicata. Se il layout avanzato era spento lo accende, partendo
+    /// dalla disposizione classica: gli altri elementi restano dove sono.
+    /// </summary>
+    public void AddExtraWidget(ExtraWidget widget, BarZone zone, int index)
+    {
+        Layout ??= BarLayout.Default(GifPlacement);
+        ExtraWidgets.Add(widget);
+        List<string> list = Layout[zone];
+        list.Insert(Math.Clamp(index, 0, list.Count), widget.Id);
+        AdvancedLayout = true;
+    }
+
+    public void RemoveExtraWidget(ExtraWidget widget)
+    {
+        ExtraWidgets.Remove(widget);
+        if (Layout != null)
+            foreach (BarZone zone in Enum.GetValues<BarZone>()) Layout[zone].Remove(widget.Id);
+    }
+
+    /// <summary>Dopo il caricamento: layout coerente e niente widget orfani, doppi o senza Id.</summary>
+    public void NormalizeLayout()
+    {
+        ExtraWidgets ??= new();
+        var ids = new HashSet<string>();
+        ExtraWidgets.RemoveAll(w => w == null || !Enum.IsDefined(w.Kind) || string.IsNullOrWhiteSpace(w.Id) || BarLayout.IsBuiltIn(w.Id) || !ids.Add(w.Id));
+        if (Layout == null)
+        {
+            ExtraWidgets.Clear();
+            return;
+        }
+        Layout.Normalize(ids);
+        ExtraWidgets.RemoveAll(w => Layout.ZoneOf(w.Id) == null);
+    }
+
     // Sistema
     public bool AutoStart { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool HideWindowsTaskbar { get => _hideWindowsTaskbar; set => Set(ref _hideWindowsTaskbar, value); }
@@ -317,6 +475,55 @@ public class AppSettings : ObservableObject
     /// <summary>Ultimi colori scelti nel selettore (il più recente per primo).</summary>
     public List<string> RecentColors { get; set; } = new();
     public List<GifItem> Gifs { get; set; } = new();
+}
+
+/// <summary>
+/// Enum scritto come testo che, in lettura, trasforma un valore sconosciuto in -1 invece di fallire: il chiamante
+/// lo riconosce con <see cref="Enum.IsDefined{TEnum}(TEnum)"/> e lo scarta.
+/// </summary>
+public sealed class TolerantEnumConverter<T> : JsonConverter<T> where T : struct, Enum
+{
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String && Enum.TryParse(reader.GetString(), true, out T named) && Enum.IsDefined(named))
+            return named;
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int number) && Enum.IsDefined(typeof(T), number))
+            return (T)Enum.ToObject(typeof(T), number);
+        return (T)Enum.ToObject(typeof(T), -1);
+    }
+
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value.ToString());
+}
+
+/// <summary>Elenco di enum scritti come testo; in lettura i valori sconosciuti vengono saltati.</summary>
+public sealed class TolerantEnumListConverter<T> : JsonConverter<List<T>> where T : struct, Enum
+{
+    private static readonly TolerantEnumConverter<T> Item = new();
+
+    public override List<T>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null) return null;
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException($"Expected a list of {typeof(T).Name}.");
+        var list = new List<T>();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType is JsonTokenType.StartArray or JsonTokenType.StartObject)
+            {
+                reader.Skip();
+                continue;
+            }
+            T value = Item.Read(ref reader, typeof(T), options);
+            if (Enum.IsDefined(value)) list.Add(value);
+        }
+        return list;
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<T> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (T item in value) writer.WriteStringValue(item.ToString());
+        writer.WriteEndArray();
+    }
 }
 
 public static class JsonOptions

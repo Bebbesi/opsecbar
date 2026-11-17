@@ -67,6 +67,8 @@ public partial class TaskbarWindow : AppBarWindow
         Tray.OverflowOpenChanged += OnPopupStateChanged;
         app.SysInfo.Updated += UpdateSysInfo;
         app.Audio.Changed += UpdateVolume;
+        WidgetTimers.Changed += OnWidgetTimersChanged;
+        _extrasTimer.Tick += (_, _) => RefreshTimedExtras();
 
         ApplyLayout();
         ApplyElements();
@@ -109,10 +111,12 @@ public partial class TaskbarWindow : AppBarWindow
             HidePreview();
             _fullScreenHelper.FullScreenApps.CollectionChanged -= OnFullScreenAppsChanged;
             _clock.Stop();
+            _extrasTimer.Stop();
             Microsoft.Win32.SystemEvents.TimeChanged -= OnSystemTimeChanged;
             Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             _app.SysInfo.Updated -= UpdateSysInfo;
             _app.Audio.Changed -= UpdateVolume;
+            WidgetTimers.Changed -= OnWidgetTimersChanged;
             _backdrop?.Dispose();
             _backdrop = null;
         };
@@ -207,18 +211,110 @@ public partial class TaskbarWindow : AppBarWindow
         int order = 0;
         foreach (BarZone zone in Enum.GetValues<BarZone>())
         {
-            foreach (BarWidget widget in layout[zone])
+            foreach (string key in layout[zone])
             {
-                FrameworkElement element = ElementOf(widget);
+                FrameworkElement? element = BarLayout.TryBuiltIn(key, out BarWidget widget) ? ElementOf(widget) : _extras.GetValueOrDefault(key);
+                if (element == null) continue;
                 BarPanel.SetZone(element, zone);
                 BarPanel.SetOrder(element, order++);
             }
         }
     }
 
+    // ---- Widget aggiunti (orologi del mondo, misuratori, collegamenti, timer...) ------------------
+
+    private readonly Dictionary<string, ExtraWidgetView> _extras = new();
+    private readonly DispatcherTimer _extrasTimer = new(DispatcherPriority.Background);
+    private string _extrasSignature = "";
+
+    /// <summary>Crea i widget aggiunti che il layout mostra. Non fa nulla se nessuno è cambiato.</summary>
+    private void BuildExtras()
+    {
+        IReadOnlyList<ExtraWidget> models = _s.ShownExtraWidgets;
+        string signature = IsHorizontal + System.Text.Json.JsonSerializer.Serialize(models);
+        if (signature == _extrasSignature) return;
+        _extrasSignature = signature;
+
+        foreach (ExtraWidgetView old in _extras.Values) WidgetPanel.Children.Remove(old);
+        _extras.Clear();
+        foreach (ExtraWidget model in models)
+        {
+            var view = new ExtraWidgetView(model, IsHorizontal);
+            view.MouseRightButtonUp += Extra_RightUp;
+            _extras[model.Id] = view;
+            WidgetPanel.Children.Add(view);
+            view.RefreshAll(_app.SysInfo, _s.Clock24h);
+        }
+        ApplyExtrasStyle(_s.Theme);
+        ScheduleExtras();
+    }
+
+    private void RefreshTimedExtras()
+    {
+        foreach (ExtraWidgetView view in _extras.Values) view.RefreshTimed(_s.Clock24h);
+        ScheduleExtras();
+    }
+
+    /// <summary>Lo scatto arriva al prossimo cambio di testo di uno dei widget: mai a vuoto, mai se nessuno cambia da solo.</summary>
+    private void ScheduleExtras()
+    {
+        _extrasTimer.Stop();
+        if (IsClosing || _extras.Count == 0) return;
+        DateTime now = DateTime.Now;
+        int? due = null;
+        foreach (ExtraWidgetView view in _extras.Values)
+            if (view.DueInMs(now) is int ms && (due == null || ms < due)) due = ms;
+        if (due == null) return;
+        _extrasTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(due.Value, 0) + 15); // poco dopo il cambio, mai prima
+        _extrasTimer.Start();
+    }
+
+    /// <summary>Un timer è partito, in pausa o finito (anche da un'altra barra): si aggiorna fuori dall'evento.</summary>
+    private void OnWidgetTimersChanged() => Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+    {
+        if (!IsClosing && _extras.Values.Any(v => v.Model.Kind == ExtraWidgetKind.Timer)) RefreshTimedExtras();
+    });
+
+    /// <summary>Sfondo "a pillola" e margini dei widget aggiunti, come per orologio e volume.</summary>
+    private void ApplyExtrasStyle(ThemeData t)
+    {
+        bool pill = !string.IsNullOrWhiteSpace(t.WidgetBackground);
+        Brush background = pill ? new SolidColorBrush(ThemeService.ParseColor(t.WidgetBackground, Colors.Transparent)) : Brushes.Transparent;
+        var corner = new CornerRadius(Math.Clamp(t.WidgetRadius, 0, 20));
+        foreach (ExtraWidgetView view in _extras.Values)
+        {
+            if (!view.TakesPill) continue;
+            view.Background = background;
+            if (pill) view.Margin = IsHorizontal ? new Thickness(3, 4, 3, 4) : new Thickness(4, 3, 4, 3);
+            else if (IsHorizontal) view.ClearValue(MarginProperty);
+            else view.Margin = new Thickness(3, 1, 3, 1);
+            view.ApplyTemplate();
+            if (view.Template?.FindName("Bd", view) is Border bd) bd.CornerRadius = corner;
+        }
+    }
+
+    private void Extra_RightUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ExtraWidgetView view) return;
+        e.Handled = true;
+        ExtraWidget model = view.Model;
+        var menu = new ContextMenu();
+        foreach (var (text, glyph, action) in view.MenuActions()) menu.Items.Add(MenuEntry(text, glyph, action));
+        if (menu.Items.Count > 0) menu.Items.Add(new Separator());
+        menu.Items.Add(MenuEntry("Widget settings…", "", () => _app.ShowSettings("Layout")));
+        menu.Items.Add(MenuEntry("Remove from taskbar", "", () =>
+        {
+            WidgetTimers.Reset(model.Id);
+            _s.RemoveExtraWidget(model);
+            _app.SettingsService.Notify(nameof(AppSettings.ExtraWidgets));
+        }));
+        OpenMenu(menu, view);
+    }
+
     /// <summary>Mostra/nasconde gli elementi opzionali in base alle impostazioni.</summary>
     public void ApplyElements()
     {
+        BuildExtras();
         ApplyWidgetLayout();
         Media.Configure(_s.ShowMediaPlayer, _s.ShowMediaTitle);
         ClockButton.Visibility = Vis(_s.ShowClock);
@@ -233,6 +329,7 @@ public partial class TaskbarWindow : AppBarWindow
         UpdateClock();
         UpdateSysInfo();
         UpdateVolume();
+        RefreshTimedExtras(); // es. orologi del mondo dopo il passaggio fra 24 e 12 ore
         BuildGifs();
     }
 
@@ -762,6 +859,7 @@ public partial class TaskbarWindow : AppBarWindow
             b.ApplyTemplate();
             if (b.Template?.FindName("Bd", b) is Border bd) bd.CornerRadius = corner;
         }
+        ApplyExtrasStyle(t);
         ApplyClockLayout();
         _lastClock = "";
         UpdateClock();
@@ -818,6 +916,8 @@ public partial class TaskbarWindow : AppBarWindow
 
     private void UpdateSysInfo()
     {
+        foreach (ExtraWidgetView view in _extras.Values)
+            if (view.UsesSystemInfo) view.RefreshSystemInfo(_app.SysInfo);
         if (!_s.ShowSysInfo) return;
         var si = _app.SysInfo;
         string sep = IsHorizontal ? "   " : "\n";
@@ -1070,6 +1170,7 @@ public partial class TaskbarWindow : AppBarWindow
     {
         var menu = new ContextMenu();
         menu.Items.Add(MenuEntry("Open TaskBar settings", "", _app.ShowSettings));
+        menu.Items.Add(MenuEntry("Add widgets…", "", () => _app.ShowSettings("Layout")));
         menu.Items.Add(MenuEntry("Task Manager", "", ShellHelper.StartTaskManager));
         menu.Items.Add(MenuEntry("Run…", "", () => ShellHelper.ShowRunDialog("", "")));
         menu.Items.Add(MenuEntry("Windows Start menu", "", ShellHelper.ShowStartMenu));

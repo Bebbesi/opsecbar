@@ -14,6 +14,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using ManagedShell.WindowsTray;
 using Microsoft.Win32;
+using OpSecBar.Controls;
 using OpSecBar.Core;
 using OpSecBar.Models;
 using OpSecBar.Services;
@@ -79,9 +80,11 @@ public partial class SettingsWindow : Window
     /// <summary>Quando cambiano i colori del tema (o si applica un altro tema) la finestra si ridipinge.</summary>
     private void OnSettingChanged(string name)
     {
-        // GIF aggiunte trascinandole sulla barra, icone del tray spostate a mano: la pagina aperta si aggiorna.
+        // GIF aggiunte trascinandole sulla barra, icone del tray spostate a mano, widget tolti dal menu della barra:
+        // la pagina aperta si aggiorna.
         if ((name == nameof(AppSettings.Gifs) && CurrentPage == "GIFs") ||
-            (name == nameof(AppSettings.PinnedTrayIcons) && CurrentPage == "System tray"))
+            (name == nameof(AppSettings.PinnedTrayIcons) && CurrentPage == "System tray") ||
+            (name == nameof(AppSettings.ExtraWidgets) && !_notifyingExtras && CurrentPage == "Layout"))
         {
             Dispatcher.BeginInvoke(() => BuildPage(false));
             return;
@@ -561,6 +564,8 @@ public partial class SettingsWindow : Window
 
         var arrange = Card();
         Row(arrange, "Arrange items", "Choose where each item sits on the bar.", Btn("Open Layout", () => ShowPage("Layout")));
+        Row(arrange, "More widgets", "World clocks, network speed, CPU, memory, disk space, timers, shortcuts and more.",
+            Btn("Add widgets", () => ShowPage("Layout")));
 
         var apps = Section("Apps");
         Row(apps, "Pinned apps", null, Toggle(S.ShowPinnedApps, v => S.ShowPinnedApps = v));
@@ -593,10 +598,16 @@ public partial class SettingsWindow : Window
     }
 
     // ---- Layout avanzato: l'utente decide in quale zona della barra sta ogni elemento, e in che ordine ----
+    // Gli elementi sono chiavi: il nome di un elemento predefinito oppure l'Id di un widget aggiunto (anche più dello stesso tipo).
 
     private const string LayoutDragFormat = "OpSecBar.LayoutWidget";
+    private const string NewWidgetDragFormat = "OpSecBar.NewWidget";
     private Border? _dropMarker;
     private int _dropMarkerIndex = -1;
+    /// <summary>Widget appena aggiunto: ricostruita la pagina, se ne mostrano le opzioni.</summary>
+    private string? _revealExtraId;
+    /// <summary>Vero mentre è questa finestra a notificare un cambio dei widget aggiunti: la pagina non va ricostruita.</summary>
+    private bool _notifyingExtras;
 
     private static readonly (BarWidget Widget, string Name, string Glyph)[] LayoutWidgets =
     {
@@ -606,8 +617,21 @@ public partial class SettingsWindow : Window
         (BarWidget.QuickSettings, "Quick settings", ""), (BarWidget.Start, "Start button", "")
     };
 
+    /// <summary>Nome e icona di un elemento del layout, predefinito o aggiunto.</summary>
+    private (string Name, string Glyph) LayoutItemInfo(string key)
+    {
+        if (BarLayout.TryBuiltIn(key, out BarWidget widget))
+        {
+            var info = LayoutWidgets.First(w => w.Widget == widget);
+            return (info.Name, info.Glyph);
+        }
+        return S.FindExtraWidget(key) is { } extra
+            ? (ExtraWidgetCatalog.Describe(extra), ExtraWidgetCatalog.GlyphOf(extra.Kind))
+            : (key, "");
+    }
+
     /// <summary>Vero se l'elemento è acceso (in "Taskbar items"): quelli spenti si possono disporre lo stesso, ma appaiono attenuati.</summary>
-    private bool WidgetShown(BarWidget widget) => widget switch
+    private bool WidgetShown(string key) => !BarLayout.TryBuiltIn(key, out BarWidget widget) || widget switch
     {
         BarWidget.Apps => S.ShowPinnedApps || S.ShowRunningApps,
         BarWidget.Media => S.ShowMediaPlayer,
@@ -625,7 +649,7 @@ public partial class SettingsWindow : Window
         PageTitle("Layout");
 
         var mode = Card();
-        Row(mode, "Advanced layout", "Decide where every item sits on the bar. When off, items keep the classic arrangement.",
+        Row(mode, "Advanced layout", "Decide where every item sits on the bar, and add more widgets. When off, items keep the classic arrangement.",
             Toggle(S.AdvancedLayout, v =>
             {
                 // La prima volta si parte dalla disposizione classica: attivarlo non sposta nulla.
@@ -655,31 +679,48 @@ public partial class SettingsWindow : Window
         _dropMarkerIndex = -1;
         var card = Card();
         foreach (var (zone, label) in zones) LayoutZoneRow(card, layout, zone, label, zones, on);
+        int hidden = on ? 0 : S.ExtraWidgets.Count;
         PageHost.Children.Add(new TextBlock
         {
-            Text = "Dimmed items are turned off. Turn them on in Taskbar items.", FontSize = 12, TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("S.Text2"), Margin = new Thickness(1, 8, 0, 0)
+            Text = "Dimmed items are turned off. Turn them on in Taskbar items." +
+                   (hidden > 0 ? $" Your {hidden} added widget{(hidden == 1 ? " is" : "s are")} hidden while Advanced layout is off." : ""),
+            FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)FindResource("S.Text2"), Margin = new Thickness(1, 8, 0, 0)
         });
 
-        if (!on) return;
-        var presets = Section("Start from a preset");
-        Row(presets, "Classic", "Apps on the left, media player in the middle, system items on the right.",
-            Btn("Apply", () => SetLayout(BarLayout.Default(S.GifPlacement))));
-        Row(presets, "Centered", "Start button and apps in the middle, like Windows 11.", Btn("Apply", () => SetLayout(BarLayout.Centered())));
+        BuildWidgetGallery(on, vertical);
+        if (on) BuildExtraEditors(layout, zones);
+
+        if (on)
+        {
+            var presets = Section("Start from a preset");
+            Row(presets, "Classic", "Apps on the left, media player in the middle, system items on the right.",
+                Btn("Apply", () => SetLayout(BarLayout.Default(S.GifPlacement))));
+            Row(presets, "Centered", "Start button and apps in the middle, like Windows 11.", Btn("Apply", () => SetLayout(BarLayout.Centered())));
+        }
+
+        if (_revealExtraId is { } reveal)
+        {
+            _revealExtraId = null;
+            RevealExtraEditor(reveal);
+        }
     }
 
+    /// <summary>Applica una disposizione predefinita; i widget aggiunti restano nella loro zona, in fondo.</summary>
     private void SetLayout(BarLayout layout)
     {
+        if (S.Layout is { } old)
+            foreach (BarZone zone in Enum.GetValues<BarZone>())
+                layout[zone].AddRange(old[zone].Where(k => !BarLayout.IsBuiltIn(k)));
         S.Layout = layout;
         _app.SettingsService.Notify(nameof(AppSettings.Layout));
         Refresh();
     }
 
-    /// <summary>Una zona della barra: etichetta + area in cui trascinare gli elementi.</summary>
+    /// <summary>Una zona della barra: etichetta + area in cui trascinare gli elementi (anche quelli nuovi dalla galleria).</summary>
     private void LayoutZoneRow(Panel card, BarLayout layout, BarZone zone, string label, (BarZone Zone, string Label)[] zones, bool enabled)
     {
         var chips = new WrapPanel { Margin = new Thickness(8, 4, 0, 4), VerticalAlignment = VerticalAlignment.Center };
-        foreach (BarWidget widget in layout[zone]) chips.Children.Add(LayoutChip(widget, zone, zones, enabled));
+        foreach (string key in layout[zone]) chips.Children.Add(LayoutChip(key, zone, zones, enabled));
         if (layout[zone].Count == 0)
             chips.Children.Add(new TextBlock
             {
@@ -697,12 +738,13 @@ public partial class SettingsWindow : Window
             drop.DragOver += (_, e) =>
             {
                 e.Handled = true;
-                if (!e.Data.GetDataPresent(LayoutDragFormat))
+                bool move = e.Data.GetDataPresent(LayoutDragFormat), add = e.Data.GetDataPresent(NewWidgetDragFormat);
+                if (!move && !add)
                 {
                     e.Effects = DragDropEffects.None;
                     return;
                 }
-                e.Effects = DragDropEffects.Move;
+                e.Effects = move ? DragDropEffects.Move : DragDropEffects.Copy;
                 drop.Background = (Brush)FindResource("S.SubtleHover");
                 ShowDropMarker(chips, LayoutInsertIndex(chips, e.GetPosition(chips)));
             };
@@ -720,8 +762,10 @@ public partial class SettingsWindow : Window
                 int index = LayoutInsertIndex(chips, e.GetPosition(chips));
                 drop.Background = Brushes.Transparent;
                 HideDropMarker();
-                if (e.Data.GetData(LayoutDragFormat) is string name && Enum.TryParse(name, out BarWidget widget))
-                    Safe(() => MoveLayoutWidget(widget, zone, index));
+                if (e.Data.GetData(LayoutDragFormat) is string key)
+                    Safe(() => MoveLayoutWidget(key, zone, index));
+                else if (e.Data.GetData(NewWidgetDragFormat) is string name && Enum.TryParse(name, out ExtraWidgetKind kind))
+                    Safe(() => AddWidget(kind, zone, index));
             };
         }
 
@@ -737,26 +781,27 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>Un elemento della barra, da trascinare in un'altra posizione (o da spostare dal menu del tasto destro).</summary>
-    private FrameworkElement LayoutChip(BarWidget widget, BarZone zone, (BarZone Zone, string Label)[] zones, bool enabled)
+    private FrameworkElement LayoutChip(string key, BarZone zone, (BarZone Zone, string Label)[] zones, bool enabled)
     {
-        var info = LayoutWidgets.First(w => w.Widget == widget);
-        bool shown = WidgetShown(widget);
+        var (name, glyph) = LayoutItemInfo(key);
+        ExtraWidget? extra = S.FindExtraWidget(key);
+        bool shown = WidgetShown(key);
         double opacity = shown ? 1 : 0.45;
 
         var content = new StackPanel { Orientation = Orientation.Horizontal };
         content.Children.Add(new TextBlock
         {
-            Text = info.Glyph, FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 14, Margin = new Thickness(0, 0, 8, 0),
-            Foreground = (Brush)FindResource("S.Text2"), VerticalAlignment = VerticalAlignment.Center
+            Text = glyph, FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 14, Margin = new Thickness(0, 0, 8, 0),
+            Foreground = (Brush)FindResource(extra != null ? "S.Accent" : "S.Text2"), VerticalAlignment = VerticalAlignment.Center
         });
-        content.Children.Add(new TextBlock { Text = info.Name, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 260, TextTrimming = TextTrimming.CharacterEllipsis });
 
         var chip = new Border
         {
-            Tag = widget, Child = content, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
+            Tag = key, Child = content, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
             Background = (Brush)FindResource("S.Control"), BorderBrush = (Brush)FindResource("S.ControlStroke"),
             Padding = new Thickness(10, 6, 12, 7), Margin = new Thickness(0, 4, 8, 4), Opacity = opacity,
-            ToolTip = shown ? null : widget == BarWidget.Gifs ? "No GIFs to show. Add some in GIFs." : "Turned off. Turn it on in Taskbar items."
+            ToolTip = shown ? null : key == BarLayout.Key(BarWidget.Gifs) ? "No GIFs to show. Add some in GIFs." : "Turned off. Turn it on in Taskbar items."
         };
         if (!enabled) return chip;
 
@@ -785,7 +830,7 @@ public partial class SettingsWindow : Window
             pressed = null;
             chip.ReleaseMouseCapture();
             chip.Opacity = 0.3;
-            try { DragDrop.DoDragDrop(chip, new DataObject(LayoutDragFormat, widget.ToString()), DragDropEffects.Move); }
+            try { DragDrop.DoDragDrop(chip, new DataObject(LayoutDragFormat, key), DragDropEffects.Move); }
             catch (Exception ex) { Log.Error("Trascinamento elemento del layout", ex); }
             finally
             {
@@ -798,18 +843,28 @@ public partial class SettingsWindow : Window
         {
             e.Handled = true;
             if (S.Layout is not { } layout) return;
-            List<BarWidget> list = layout[zone];
-            int at = list.IndexOf(widget);
+            List<string> list = layout[zone];
+            int at = list.IndexOf(key);
             var menu = new ContextMenu { PlacementTarget = chip, Placement = PlacementMode.Bottom };
+            if (extra != null)
+            {
+                menu.Items.Add(Ui.MenuEntry("Options", "", () => RevealExtraEditor(key)));
+                menu.Items.Add(new Separator());
+            }
             foreach (var (other, label) in zones)
                 if (other != zone)
-                    menu.Items.Add(Ui.MenuEntry($"Move to the {label.ToLowerInvariant()}", "", () => MoveLayoutWidget(widget, other, layout[other].Count)));
+                    menu.Items.Add(Ui.MenuEntry($"Move to the {label.ToLowerInvariant()}", "", () => MoveLayoutWidget(key, other, layout[other].Count)));
             if (list.Count > 1)
             {
                 menu.Items.Add(new Separator());
                 // L'indice è quello di inserimento prima di togliere l'elemento: "dopo il successivo" è at + 2.
-                if (at > 0) menu.Items.Add(Ui.MenuEntry("Move earlier", "", () => MoveLayoutWidget(widget, zone, at - 1)));
-                if (at < list.Count - 1) menu.Items.Add(Ui.MenuEntry("Move later", "", () => MoveLayoutWidget(widget, zone, at + 2)));
+                if (at > 0) menu.Items.Add(Ui.MenuEntry("Move earlier", "", () => MoveLayoutWidget(key, zone, at - 1)));
+                if (at < list.Count - 1) menu.Items.Add(Ui.MenuEntry("Move later", "", () => MoveLayoutWidget(key, zone, at + 2)));
+            }
+            if (extra != null)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(Ui.MenuEntry("Remove from taskbar", "", () => RemoveWidget(extra)));
             }
             menu.IsOpen = true;
         };
@@ -817,7 +872,7 @@ public partial class SettingsWindow : Window
     }
 
     private static List<FrameworkElement> LayoutChips(Panel panel) =>
-        panel.Children.OfType<FrameworkElement>().Where(c => c.Tag is BarWidget).ToList();
+        panel.Children.OfType<FrameworkElement>().Where(c => c.Tag is string).ToList();
 
     /// <summary>Posizione (tra gli elementi della zona) in cui finirebbe ciò che viene rilasciato nel punto indicato.</summary>
     private static int LayoutInsertIndex(Panel panel, Point point)
@@ -852,17 +907,292 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>Sposta un elemento in una zona, alla posizione indicata (contata prima di toglierlo da dov'era).</summary>
-    private void MoveLayoutWidget(BarWidget widget, BarZone zone, int index)
+    private void MoveLayoutWidget(string key, BarZone zone, int index)
     {
         if (S.Layout is not { } layout) return;
-        List<BarWidget> target = layout[zone];
-        int current = target.IndexOf(widget);
+        List<string> target = layout[zone];
+        int current = target.IndexOf(key);
         if (current >= 0 && current < index) index--; // togliendolo, ciò che lo segue scala di un posto
-        foreach (BarZone z in Enum.GetValues<BarZone>()) layout[z].Remove(widget);
-        target.Insert(Math.Clamp(index, 0, target.Count), widget);
+        foreach (BarZone z in Enum.GetValues<BarZone>()) layout[z].Remove(key);
+        target.Insert(Math.Clamp(index, 0, target.Count), key);
         _app.SettingsService.Notify(nameof(AppSettings.Layout));
         // La pagina si ricostruisce a trascinamento concluso: questo codice può girare dentro DoDragDrop.
         Dispatcher.BeginInvoke(Refresh);
+    }
+
+    // ---- Widget aggiunti ------------------------------------------------------------------------
+
+    /// <summary>Galleria dei widget da aggiungere: un click li mette sulla barra, oppure si trascinano in una zona.</summary>
+    private void BuildWidgetGallery(bool on, bool vertical)
+    {
+        SectionHeader("Add widgets", on
+            ? $"Click a widget to add it to the {(vertical ? "bottom" : "right")} of the bar, or drag it to a spot above. Add as many as you like, even several of the same kind."
+            : "Click a widget to add it to the bar. This turns on Advanced layout; everything else stays where it is.");
+        var grid = new UniformGrid { Columns = 3, Margin = new Thickness(0, 0, -8, 0) };
+        foreach (var (kind, name, glyph, description) in ExtraWidgetCatalog.All)
+            grid.Children.Add(WidgetTile(kind, name, glyph, description, on));
+        PageHost.Children.Add(grid);
+    }
+
+    private FrameworkElement WidgetTile(ExtraWidgetKind kind, string name, string glyph, string description, bool draggable)
+    {
+        var body = new Grid();
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        body.Children.Add(new TextBlock
+        {
+            Text = glyph, FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 18, Foreground = (Brush)FindResource("S.Accent"),
+            VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 12, 0)
+        });
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        text.Children.Add(new TextBlock
+        {
+            Text = description, FontSize = 12, Foreground = (Brush)FindResource("S.Text2"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0)
+        });
+        Grid.SetColumn(text, 1);
+        body.Children.Add(text);
+
+        var tile = new Border
+        {
+            Background = (Brush)FindResource("S.Card"), BorderBrush = (Brush)FindResource("S.CardStroke"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4), Padding = new Thickness(14, 11, 12, 12), Margin = new Thickness(0, 0, 8, 8),
+            Child = body, Cursor = Cursors.Hand, ToolTip = "Add " + name.ToLowerInvariant() + (draggable ? " · or drag it to a spot above" : "")
+        };
+        tile.MouseEnter += (_, _) => tile.Background = (Brush)FindResource("S.SubtleHover");
+        tile.MouseLeave += (_, _) => tile.Background = (Brush)FindResource("S.Card");
+
+        // Click: si aggiunge in fondo alla barra. Trascinamento: nella zona e nel punto in cui lo si rilascia.
+        Point? pressed = null;
+        tile.MouseLeftButtonDown += (_, e) =>
+        {
+            pressed = e.GetPosition(tile);
+            tile.CaptureMouse();
+        };
+        tile.MouseLeftButtonUp += (_, e) =>
+        {
+            bool click = pressed != null;
+            pressed = null;
+            Point p = e.GetPosition(tile);
+            tile.ReleaseMouseCapture();
+            if (click && p.X >= 0 && p.Y >= 0 && p.X <= tile.ActualWidth && p.Y <= tile.ActualHeight)
+                Safe(() => AddWidget(kind, BarZone.End, 0));
+        };
+        tile.MouseMove += (_, e) =>
+        {
+            if (!draggable || pressed is not { } from || e.LeftButton != MouseButtonState.Pressed) return;
+            Point now = e.GetPosition(tile);
+            if (Math.Abs(now.X - from.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(now.Y - from.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            pressed = null;
+            tile.ReleaseMouseCapture();
+            try { DragDrop.DoDragDrop(tile, new DataObject(NewWidgetDragFormat, kind.ToString()), DragDropEffects.Copy); }
+            catch (Exception ex) { Log.Error("Trascinamento di un nuovo widget", ex); }
+            finally { HideDropMarker(); }
+        };
+        return tile;
+    }
+
+    /// <summary>Aggiunge un widget nella zona e posizione indicate (accendendo il layout avanzato se serve) e ne mostra le opzioni.</summary>
+    private void AddWidget(ExtraWidgetKind kind, BarZone zone, int index)
+    {
+        ExtraWidget widget = ExtraWidget.Create(kind);
+        S.AddExtraWidget(widget, zone, index);
+        NotifyExtras();
+        _revealExtraId = widget.Id;
+        // Può girare dentro DoDragDrop: la pagina si ricostruisce dopo.
+        Dispatcher.BeginInvoke(Refresh);
+    }
+
+    private void RemoveWidget(ExtraWidget widget)
+    {
+        WidgetTimers.Reset(widget.Id);
+        S.RemoveExtraWidget(widget);
+        NotifyExtras();
+        Dispatcher.BeginInvoke(Refresh);
+    }
+
+    /// <summary>Le barre ridisegnano i widget aggiunti; la pagina aperta resta com'è (si sta scrivendo in una casella).</summary>
+    private void NotifyExtras()
+    {
+        _notifyingExtras = true;
+        try { _app.SettingsService.Notify(nameof(AppSettings.ExtraWidgets)); }
+        finally { _notifyingExtras = false; }
+    }
+
+    /// <summary>Porta in vista (ed evidenzia) la scheda delle opzioni di un widget aggiunto.</summary>
+    private void RevealExtraEditor(string id)
+    {
+        if (PageHost.Children.OfType<Border>().FirstOrDefault(b => Equals(b.Tag, id)) is not { } editor) return;
+        editor.BorderBrush = (Brush)FindResource("S.Accent");
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () => editor.BringIntoView());
+    }
+
+    /// <summary>Una scheda di opzioni per ogni widget aggiunto, nell'ordine in cui compaiono sulla barra.</summary>
+    private void BuildExtraEditors(BarLayout layout, (BarZone Zone, string Label)[] zones)
+    {
+        var placed = new List<(ExtraWidget Widget, string Zone)>();
+        foreach (var (zone, label) in zones)
+            foreach (string key in layout[zone])
+                if (S.FindExtraWidget(key) is { } widget) placed.Add((widget, label));
+        if (placed.Count == 0) return;
+
+        SectionHeader("Your widgets", "Options for the widgets you added. Right-click a widget on the bar for quick actions.");
+        foreach (var (widget, zone) in placed) ExtraEditor(widget, zone);
+    }
+
+    private void ExtraEditor(ExtraWidget w, string zone)
+    {
+        StackPanel card = Card();
+        if (card.Parent is Border frame)
+        {
+            frame.Tag = w.Id;
+            frame.Margin = new Thickness(0, 0, 0, 8);
+        }
+
+        // Intestazione: icona, nome con il dettaglio (fuso, unità...), zona e pulsante per toglierlo.
+        var title = new TextBlock { Text = ExtraWidgetCatalog.Describe(w), FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
+        var heading = new StackPanel();
+        heading.Children.Add(title);
+        heading.Children.Add(new TextBlock { Text = zone + " side of the bar", FontSize = 12, Foreground = (Brush)FindResource("S.Text2") });
+        var left = new DockPanel();
+        var icon = new TextBlock
+        {
+            Text = ExtraWidgetCatalog.GlyphOf(w.Kind), FontFamily = (FontFamily)FindResource("S.Icons"), FontSize = 16,
+            Foreground = (Brush)FindResource("S.Accent"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 14, 0)
+        };
+        DockPanel.SetDock(icon, Dock.Left);
+        left.Children.Add(icon);
+        left.Children.Add(heading);
+        RowCustom(card, left, IconBtn("", "Remove from taskbar", () => RemoveWidget(w)));
+
+        void Change(Action apply)
+        {
+            apply();
+            NotifyExtras();
+            title.Text = ExtraWidgetCatalog.Describe(w);
+        }
+
+        TextBox LabelBox() => TextCtl(() => w.Label, v => Change(() => w.Label = v.Trim()), 200);
+
+        switch (w.Kind)
+        {
+            case ExtraWidgetKind.Text:
+                Row(card, "Text", null, TextCtl(() => w.Label, v => Change(() => w.Label = v), 240));
+                break;
+
+            case ExtraWidgetKind.WorldClock:
+                var timeZones = TimeZoneInfo.GetSystemTimeZones().Select(z => (z.Id, z.DisplayName)).ToArray();
+                Row(card, "Time zone", null, ComboCtl(timeZones, w.TimeZone, v => Change(() => w.TimeZone = v), 320));
+                Row(card, "Name", "Shown before the time. Leave empty to use the city of the time zone.", LabelBox());
+                Row(card, "Time format", "Leave empty to follow the clock (24 or 12 hours). Examples: HH:mm · h:mm tt · ddd HH:mm",
+                    FormatCtl(w.Format, "HH:mm", v => Change(() => w.Format = v)));
+                break;
+
+            case ExtraWidgetKind.Disk:
+                Row(card, "Drive", null, DriveCtl(w, Change));
+                Row(card, "Label", "Text before the free space.", LabelBox());
+                break;
+
+            case ExtraWidgetKind.Shortcut:
+                Row(card, "Opens", "An app, file, folder, web address (https://…) or command, such as notepad or wt -p PowerShell.", ShortcutTargetCtl(w, Change));
+                Row(card, "Label", "Text next to the icon. Leave empty to show just the icon.", LabelBox());
+                break;
+
+            case ExtraWidgetKind.Timer:
+                Row(card, "Duration", "0 = stopwatch. Click the widget on the bar to start or pause it, right-click it to reset.",
+                    SliderCtl(w.Minutes, 0, 180, 1, "0 min", v => Change(() => w.Minutes = v)));
+                Row(card, "Label", null, LabelBox());
+                break;
+
+            case ExtraWidgetKind.Battery:
+                Row(card, "Label", "Text before the charge level. The widget hides itself on PCs without a battery.", LabelBox());
+                break;
+
+            case ExtraWidgetKind.Cpu:
+            case ExtraWidgetKind.Memory:
+            case ExtraWidgetKind.NetworkSpeed:
+            case ExtraWidgetKind.Uptime:
+                Row(card, "Label", w.Kind switch
+                {
+                    ExtraWidgetKind.Cpu => "Text before the value, such as CPU.",
+                    ExtraWidgetKind.Memory => "Text before the value, such as RAM.",
+                    ExtraWidgetKind.NetworkSpeed => "Text before the speeds, such as Net.",
+                    _ => "Text before the value, such as Up."
+                }, LabelBox());
+                break;
+
+            case ExtraWidgetKind.Spacer:
+                Row(card, "Width", "Height when the bar is docked left or right.", SliderCtl(w.Width, 4, 120, 1, "0 px", v => Change(() => w.Width = v)));
+                break;
+        }
+
+        if (w.Kind is not (ExtraWidgetKind.Text or ExtraWidgetKind.Separator or ExtraWidgetKind.Spacer))
+            Row(card, w.Kind == ExtraWidgetKind.Shortcut ? "Show the app icon" : "Show icon", null, Toggle(w.ShowIcon, v => Change(() => w.ShowIcon = v)));
+        if (w.Kind != ExtraWidgetKind.Spacer)
+            Row(card, "Color", "Off = same as the bar.", OptionalColorCtl(w.Color, T.AccentColor, v => Change(() => w.Color = v)));
+    }
+
+    /// <summary>Casella di testo salvata all'Invio o all'uscita dalla casella.</summary>
+    private TextBox TextCtl(Func<string> get, Action<string> set, double width = 220)
+    {
+        var box = new TextBox { Style = (Style)FindResource("S.TextBox"), Width = width, Text = get() };
+        void Commit() { if (box.Text != get()) Safe(() => set(box.Text)); }
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Commit(); };
+        box.LostKeyboardFocus += (_, _) => Commit();
+        return box;
+    }
+
+    /// <summary>Unità di cui mostrare lo spazio libero: dischi interni e rimovibili pronti (quelli di rete potrebbero bloccare la barra).</summary>
+    private FrameworkElement DriveCtl(ExtraWidget w, Action<Action> change)
+    {
+        var options = new List<(string Value, string Label)>();
+        foreach (DriveInfo drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (drive.DriveType is not (DriveType.Fixed or DriveType.Removable) || !drive.IsReady) continue;
+                string label = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? (drive.DriveType == DriveType.Removable ? "Removable drive" : "Local disk") : drive.VolumeLabel;
+                options.Add((drive.Name, $"{drive.Name.TrimEnd('\\')}  {label}"));
+            }
+            catch (Exception ex) { Log.Warn($"Unità {drive.Name}: {ex.Message}"); }
+        }
+        string current = Controls.ExtraWidgetView.DriveRoot(w.Target);
+        if (!options.Any(o => string.Equals(o.Value, current, StringComparison.OrdinalIgnoreCase)))
+            options.Insert(0, (current, current.TrimEnd('\\') + "  (not available)"));
+        current = options.First(o => string.Equals(o.Value, current, StringComparison.OrdinalIgnoreCase)).Value;
+        return ComboCtl(options.ToArray(), current, v => change(() => w.Target = v), 220);
+    }
+
+    /// <summary>Destinazione di un collegamento: casella di testo, oppure un file o una cartella scelti da una finestra.</summary>
+    private FrameworkElement ShortcutTargetCtl(ExtraWidget w, Action<Action> change)
+    {
+        TextBox box = TextCtl(() => w.Target, v => change(() => w.Target = v.Trim()), 300);
+        void Pick(string path)
+        {
+            box.Text = path;
+            change(() => w.Target = path);
+        }
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
+        buttons.Children.Add(Btn("Choose a file…", () =>
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Choose what the shortcut opens", DereferenceLinks = false,
+                Filter = "Apps and shortcuts (*.exe;*.lnk;*.url;*.bat;*.cmd)|*.exe;*.lnk;*.url;*.bat;*.cmd|All files (*.*)|*.*"
+            };
+            if (dialog.ShowDialog(this) == true) Pick(dialog.FileName);
+        }));
+        buttons.Children.Add(Gap(8));
+        buttons.Children.Add(Btn("Choose a folder…", () =>
+        {
+            var dialog = new OpenFolderDialog { Title = "Choose the folder the shortcut opens" };
+            if (dialog.ShowDialog(this) == true) Pick(dialog.FolderName);
+        }));
+        var panel = new StackPanel();
+        panel.Children.Add(box);
+        panel.Children.Add(buttons);
+        return panel;
     }
 
     private void BuildPinnedApps()
@@ -1050,6 +1380,10 @@ public partial class SettingsWindow : Window
     {
         PageTitle("Widgets");
 
+        var more = Card();
+        Row(more, "More widgets", "Put world clocks, network speed, CPU, memory, disk space, timers, shortcuts and more on the bar.",
+            Btn("Add widgets", () => ShowPage("Layout")));
+
         var clock = Section("Clock");
         Row(clock, "Show the clock", null, Toggle(S.ShowClock, v => S.ShowClock = v));
         Row(clock, "Time format", "Leave empty for automatic. Examples: HH:mm · h:mm tt · HH:mm:ss · H.mm",
@@ -1080,7 +1414,7 @@ public partial class SettingsWindow : Window
         Row(volume, "Icon color", "Off = same as the bar text.", OptionalColorCtl(T.VolumeColor, T.AccentColor, v => Edit(t => t.VolumeColor = v)));
 
         var pill = Section("Widget background");
-        Row(pill, "Background", "A rounded pill behind the clock and the volume.",
+        Row(pill, "Background", "A rounded pill behind the clock, the volume and the widgets you added.",
             OptionalColorCtl(T.WidgetBackground, "#26FFFFFF", v => Edit(t => t.WidgetBackground = v)));
         Row(pill, "Corner radius", null, SliderCtl(T.WidgetRadius, 0, 20, 1, "0 px", v => Edit(t => t.WidgetRadius = v)));
     }

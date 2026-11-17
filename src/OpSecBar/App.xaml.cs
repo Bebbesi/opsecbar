@@ -124,7 +124,7 @@ public partial class App : Application
             Media = new MediaService(Dispatcher);
             if (Settings.ShowMediaPlayer) Media.Start();
             SysInfo = new SystemInfoService();
-            SysInfo.SetEnabled(Settings.ShowSysInfo);
+            SysInfo.SetEnabled(Settings.NeedsSystemInfo, Settings.NeedsNetworkSpeed);
             Audio = new AudioService(Dispatcher);
             Audio.SetEnabled(Settings.ShowVolume);
 
@@ -423,7 +423,8 @@ public partial class App : Application
                     {
                         if (Settings.ShowMediaPlayer) Media.Start(); else Media.Stop();
                     }
-                    if (name == nameof(AppSettings.ShowSysInfo)) SysInfo.SetEnabled(Settings.ShowSysInfo);
+                    // Monitor di sistema, widget aggiunti, layout: i dati di sistema servono solo se qualcuno li mostra.
+                    SysInfo.SetEnabled(Settings.NeedsSystemInfo, Settings.NeedsNetworkSpeed);
                     if (name == nameof(AppSettings.ShowVolume)) Audio.SetEnabled(Settings.ShowVolume);
                     foreach (var bar in _bars) bar.ApplyElements();
                     break;

@@ -35,6 +35,8 @@ original taskbar automatically in every situation: normal exit, crash, or being 
 - **Real system tray**, including a panel for hidden icons.
 - **Full customization**: colors (with an eyedropper and recent colors), gradients, opacity, blur / acrylic / glass, corners, margins, borders, neon glow, fonts, position, multiple monitors.
 - **Styled widgets**: clock, date and volume with their own colors, fonts and formats.
+- **More widgets, as many as you like**: world clocks, network speed, CPU, memory, battery, disk space, uptime, timers,
+  shortcuts, text, separators and spacers, anywhere on the bar (even several of the same kind).
 - **Animated GIFs** on the bar: drop them in Settings or straight onto the bar.
 - **Themes**: 42 built-in (Cyberpunk, Lofi, Gaming, terminal palettes like Gruvbox, Tokyo Night, Catppuccin, Solarized, Phosphor CRT…) and custom, importable and exportable as `.json`.
 - **Icon colors**: one color for all bar glyphs, and app icons in original colors, tinted or as monochrome silhouettes.
@@ -106,6 +108,28 @@ Click it to expand it with a progress bar.
 - Quick settings and the Start button.
 - Optional: CPU / RAM / battery.
 
+### More widgets
+**Settings → Layout → Add widgets** (or right-click the bar → *Add widgets…*): click a widget to put it on the bar, or
+drag it to the exact spot in a zone. You can add as many as you like, including several of the same kind (a clock for
+each time zone, a shortcut for each app or site). Each one has its own options under **Your widgets**, and you can
+right-click it on the bar for quick actions or to remove it.
+
+| Widget | Shows | Click |
+| --- | --- | --- |
+| World clock | the time in any time zone, named after its city or your own label | |
+| Network speed | live download and upload speed | Task Manager |
+| CPU / Memory | processor and RAM usage | Task Manager |
+| Battery | charge level and charging state (hidden on PCs without a battery) | power settings |
+| Disk space | free space on a drive | opens the drive |
+| Uptime | time since Windows started | |
+| Timer | a countdown (plays a sound at zero) or a stopwatch | start / pause, right-click to reset |
+| Shortcut | the icon of an app, file, folder, website or command | opens it |
+| Text | any text, e.g. `$ whoami` for a terminal look | |
+| Separator / Spacer | a thin line or empty space between items | |
+
+Added widgets use the bar's font and colors (or their own color), and the widget background pill from **Widgets**.
+They need the advanced layout: adding the first one turns it on, starting from the classic arrangement.
+
 ### Start menu
 Search, favorites, your apps, and lock / sign out / sleep / restart / shut down. The app list shows the shortcuts in
 your Start Menu `Programs` folder (including Steam games); **Settings → Start menu → App list** switches it to all
@@ -132,6 +156,7 @@ Right-click the clock or the quick settings button for the Windows panels. To al
 | Themes | built-in and custom themes, save / import / export |
 | Behavior | position (top / bottom / left / right), always visible or auto-hide, full-screen handling, multiple monitors, layout (height, margin for a floating bar, icon size and spacing) |
 | Taskbar items | turn each part of the bar on or off individually |
+| Layout | advanced layout: the zone and order of every item, presets, and extra widgets with their options |
 | Pinned apps | manage the favorites shown in the bar |
 | System tray | choose which tray icons are always visible |
 | Start menu | Start menu options |
@@ -242,7 +267,7 @@ src/OpSecBar/
     AutoStartService, SystemInfoService
   Windows/                 TaskbarWindow, SettingsWindow, and the panels built on FlyoutWindow:
                            StartMenuWindow, CalendarWindow, QuickSettingsWindow
-  Controls/                MediaWidget, TrayArea
+  Controls/                MediaWidget, TrayArea, ExtraWidgetView (the widgets added from Layout)
   Themes/Controls.xaml     shared styles (buttons, menus, tooltips, sliders)
 ```
 
