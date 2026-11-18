@@ -87,10 +87,13 @@
         </Setter>
     </Style>
 
-    <!-- Tooltip -->
+    <!-- Tooltip (popup come i menu contestuali: vedi sotto per allineamento ai pixel e ClearType) -->
     <Style TargetType="ToolTip">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
         <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
         <Setter Property="FontFamily" Value="{DynamicResource BarFont}" />
         <Setter Property="FontSize" Value="12" />
@@ -98,7 +101,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
                     <Border Background="{DynamicResource PanelSolidBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
-                            BorderThickness="1" CornerRadius="6" Padding="9,5" Margin="4">
+                            BorderThickness="1" CornerRadius="6" Padding="9,5" Margin="4"
+                            RenderOptions.ClearTypeHint="Enabled">
                         <ContentPresenter MaxWidth="360">
                             <ContentPresenter.Resources>
                                 <Style TargetType="TextBlock">
@@ -112,23 +116,36 @@
         </Setter>
     </Style>
 
-    <!-- Menu contestuali -->
+    <!-- Menu contestuali.
+         Il popup è una finestra a sé: non eredita nulla dalla barra, quindi l'allineamento ai pixel e la resa del testo
+         vanno impostati qui. Senza arrotondamento, con scale come 125% o 175% margini e righe finiscono a metà pixel e il
+         testo viene sfumato; l'ombra sta su un bordo separato perché un Effect sul contenitore del testo lo disegnerebbe
+         in una superficie intermedia (testo sfocato e senza ClearType). -->
     <Style TargetType="ContextMenu">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
         <Setter Property="Foreground" Value="{DynamicResource PanelFgBrush}" />
         <Setter Property="FontFamily" Value="{DynamicResource BarFont}" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Border Background="{DynamicResource PanelSolidBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
-                            BorderThickness="1" CornerRadius="9" Padding="4" Margin="10" MinWidth="190">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.35" />
-                        </Border.Effect>
-                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
-                    </Border>
+                    <Grid Margin="10">
+                        <Border Background="{DynamicResource PanelSolidBrush}" CornerRadius="9">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.35" />
+                            </Border.Effect>
+                        </Border>
+                        <!-- Fondo opaco: si può riattivare ClearType anche nel popup trasparente -->
+                        <Border Background="{DynamicResource PanelSolidBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                                BorderThickness="1" CornerRadius="9" Padding="4" MinWidth="190"
+                                RenderOptions.ClearTypeHint="Enabled">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
