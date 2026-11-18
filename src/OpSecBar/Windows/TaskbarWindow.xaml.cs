@@ -714,6 +714,11 @@ public partial class TaskbarWindow : AppBarWindow
             return IntPtr.Zero;
         }
 
+        // I giochi leggono il mouse in raw input finché restano in primo piano, anche col cursore sopra la barra:
+        // senza attivazione il click arriverebbe pure al gioco. Se la finestra attiva di un'altra app sta sotto la
+        // barra, al click la barra le toglie il primo piano.
+        if (msg == 0x0021 /* WM_MOUSEACTIVATE */) StealForegroundFromCoveredApp(hwnd);
+
         IntPtr result = base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         if (msg == Native.WM_WINDOWPOSCHANGED)
         {
@@ -722,6 +727,21 @@ public partial class TaskbarWindow : AppBarWindow
             ScheduleShapeUpdate();
         }
         return result;
+    }
+
+    private static void StealForegroundFromCoveredApp(IntPtr hwnd)
+    {
+        try
+        {
+            IntPtr fg = Native.GetForegroundWindow();
+            if (fg == IntPtr.Zero || fg == hwnd) return;
+            Native.GetWindowThreadProcessId(fg, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return;
+            if (!Native.GetWindowRect(fg, out Native.RECT a) || !Native.GetWindowRect(hwnd, out Native.RECT b)) return;
+            bool overlaps = a.Left < b.Right && b.Left < a.Right && a.Top < b.Bottom && b.Top < a.Bottom;
+            if (overlaps) Native.ForceForeground(hwnd, allowKeyTap: false);
+        }
+        catch (Exception ex) { Log.Error("StealForegroundFromCoveredApp", ex); }
     }
 
     private void ScheduleShapeUpdate()
