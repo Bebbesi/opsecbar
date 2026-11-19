@@ -33,6 +33,7 @@ public partial class TaskbarWindow : AppBarWindow
     private int _openPopups;
     private bool _hiddenByAutoHide, _shapeUpdatePending;
     private BackdropWindow? _backdrop;
+    private ShadowWindow? _shadow;
 
     // Anteprime delle finestre al passaggio del mouse
     private readonly DispatcherTimer _previewShowTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
@@ -119,6 +120,8 @@ public partial class TaskbarWindow : AppBarWindow
             WidgetTimers.Changed -= OnWidgetTimersChanged;
             _backdrop?.Dispose();
             _backdrop = null;
+            _shadow?.Close();
+            _shadow = null;
         };
     }
 
@@ -428,20 +431,6 @@ public partial class TaskbarWindow : AppBarWindow
             : string.IsNullOrWhiteSpace(t.BorderColor2) ? new SolidColorBrush(bc)
             : new LinearGradientBrush(bc, ThemeService.ParseColor(t.BorderColor2, bc), angle);
 
-        // Ombra o alone colorato: richiede spazio trasparente attorno alla barra, quindi un margine > 0 (barra flottante).
-        bool shadow = t.Shadow && m > 0;
-        ShadowLayer.Visibility = Vis(shadow);
-        ShadowShape.Margin = margin;
-        ShadowShape.CornerRadius = new CornerRadius(radius);
-        Color sc = ThemeService.ParseColor(t.ShadowColor, Colors.Black);
-        double strength = sc.A / 255.0;
-        ShadowShape.Background = new SolidColorBrush(Color.FromRgb(sc.R, sc.G, sc.B));
-        ShadowShape.Effect = new System.Windows.Media.Effects.DropShadowEffect
-        {
-            Color = Color.FromRgb(sc.R, sc.G, sc.B), BlurRadius = Math.Clamp(t.ShadowSize, 2, 40),
-            ShadowDepth = t.ShadowGlow ? 0 : 2, Direction = 270, Opacity = (t.ShadowGlow ? 0.95 : 0.5) * strength
-        };
-
         // Bordo animato: stessa sagoma della barra, colore dell'effetto (o accento) e lato verso il desktop.
         FxLayer.Margin = margin;
         Color fxColor = ThemeService.ParseColor(string.IsNullOrWhiteSpace(t.BorderFxColor) ? t.AccentColor : t.BorderFxColor, Colors.White);
@@ -472,33 +461,37 @@ public partial class TaskbarWindow : AppBarWindow
         _shapeUpdatePending = false;
         if (Handle == IntPtr.Zero || !IsLoaded || IsClosing) return;
         ThemeData t = _s.Theme;
-        // Niente lastra se la barra è nascosta (auto-hide) o ha ceduto il posto a un'app a schermo intero.
-        bool blur = BackdropHelper.BlurActive(t.Backdrop) && !_hiddenByAutoHide && Topmost && IsVisible && BarBorder.ActualWidth > 0;
+        // Niente lastra né ombra se la barra è nascosta (auto-hide) o ha ceduto il posto a un'app a schermo intero.
+        bool visible = !_hiddenByAutoHide && Topmost && IsVisible && BarBorder.ActualWidth > 0;
+        bool blur = visible && BackdropHelper.BlurActive(t.Backdrop);
+        bool shadow = visible && t.Shadow;
         // Il bordo animato non consuma nulla mentre la barra è nascosta o dietro un'app a schermo intero.
         SetAnimationsPaused(_hiddenByAutoHide || !Topmost || !IsVisible);
         Color bg = ThemeService.ParseColor(t.BackgroundColor, Color.FromRgb(0x1B, 0x1C, 0x22));
 
         try
         {
+            double scale = blur || shadow ? DeviceScale() : 1;
+            Point origin = blur || shadow ? BarBorder.PointToScreen(new Point(0, 0)) : default;
+
+            // Ombra posizionata prima della lastra sfocata: così nello z-order resta dietro sia alla barra sia al blur.
+            if (shadow)
+            {
+                _shadow ??= new ShadowWindow();
+                _shadow.Update(Handle, origin, BarBorder.ActualWidth, BarBorder.ActualHeight,
+                    Math.Clamp(t.CornerRadius, 0, 48), scale, Screen.Bounds,
+                    ThemeService.ParseColor(t.ShadowColor, Colors.Black), t.ShadowSize, t.ShadowGlow);
+            }
+            else _shadow?.HideShadow();
+
             if (blur)
             {
-                double scale = DeviceScale();
-                Point origin = BarBorder.PointToScreen(new Point(0, 0));
                 _backdrop ??= new BackdropWindow();
                 _backdrop.Show(Handle, (int)Math.Round(origin.X), (int)Math.Round(origin.Y),
                     (int)Math.Round(BarBorder.ActualWidth * scale), (int)Math.Round(BarBorder.ActualHeight * scale),
                     BackdropRadiusPx(), t.Backdrop, bg, t.Opacity);
             }
             else _backdrop?.Hide();
-
-            if (ShadowLayer.Visibility == Visibility.Visible && BarBorder.ActualWidth > 0)
-            {
-                Point o = BarBorder.TranslatePoint(new Point(0, 0), ShadowLayer);
-                double r = Math.Clamp(t.CornerRadius, 0, 48);
-                var outer = new RectangleGeometry(new Rect(-50, -50, ShadowLayer.ActualWidth + 100, ShadowLayer.ActualHeight + 100));
-                var inner = new RectangleGeometry(new Rect(o.X, o.Y, BarBorder.ActualWidth, BarBorder.ActualHeight), r, r);
-                ShadowLayer.Clip = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
-            }
         }
         catch (Exception ex) { Log.Error("UpdateShape", ex); }
     }
@@ -738,7 +731,8 @@ public partial class TaskbarWindow : AppBarWindow
         IntPtr result = base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         if (msg == Native.WM_WINDOWPOSCHANGED)
         {
-            // La barra si è mossa o ha cambiato z-order: la lastra sfocata la segue.
+            // La barra si è mossa o ha cambiato z-order: ombra e lastra sfocata la seguono.
+            _shadow?.Restack(hwnd);
             _backdrop?.Restack(hwnd);
             ScheduleShapeUpdate();
         }
