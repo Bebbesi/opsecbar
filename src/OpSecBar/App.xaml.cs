@@ -150,7 +150,7 @@ public partial class App : Application
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, StartTray);
             RegisterSignals();
             ApplyWinKey();
-            _clickShield = new ClickShield(); _clickShield.Install();
+            _clickShield = new ClickShield(a => Dispatcher.BeginInvoke(a)); _clickShield.Install();
             SeedDefaultsOnFirstRun();
             _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
             if (Settings.ShowQuickSettings && Settings.CustomQuickSettings) QuickSettingsWindow.Preload();
