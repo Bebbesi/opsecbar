@@ -59,6 +59,7 @@ public partial class App : Application
     private EventWaitHandle? _exitEvent, _showSettingsEvent;
     private DispatcherTimer? _recreateTimer;
     private WinKeyHook? _winKey;
+    private ClickShield? _clickShield;
     private TrayKeeper? _trayKeeper;
     private bool _exiting, _started;
     private readonly long _startedAt = Environment.TickCount64;
@@ -149,6 +150,7 @@ public partial class App : Application
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, StartTray);
             RegisterSignals();
             ApplyWinKey();
+            _clickShield = new ClickShield(); _clickShield.Install();
             SeedDefaultsOnFirstRun();
             _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
             if (Settings.ShowQuickSettings && Settings.CustomQuickSettings) QuickSettingsWindow.Preload();
@@ -606,6 +608,7 @@ public partial class App : Application
 
         try { SettingsService?.SaveNow(); } catch { }
         try { _winKey?.Dispose(); } catch { }
+        try { _clickShield?.Dispose(); } catch { }
         try { _trayKeeper?.Dispose(); } catch { }
         try { Native.UnregisterHotKey(IntPtr.Zero, EmergencyHotkeyId); } catch { }
         try { _settingsWindow?.Close(); } catch { }
