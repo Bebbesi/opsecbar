@@ -276,7 +276,7 @@ public partial class SettingsWindow : Window
         }
 
         var shadow = Section("Shadow and glow");
-        Row(shadow, "Shadow", "Needs a floating margin.", Toggle(T.Shadow, v => Edit(t => t.Shadow = v)));
+        Row(shadow, "Shadow", null, Toggle(T.Shadow, v => Edit(t => t.Shadow = v)));
         Row(shadow, "Glow", "Spreads the shadow evenly around the bar, like a neon light.", Toggle(T.ShadowGlow, v => Edit(t => t.ShadowGlow = v)));
         Row(shadow, "Color", null, ColorCtl(T.ShadowColor, v => Edit(t => t.ShadowColor = v)));
         Row(shadow, "Size", null, SliderCtl(T.ShadowSize, 4, 40, 1, "0 px", v => Edit(t => t.ShadowSize = v)));
@@ -503,7 +503,7 @@ public partial class SettingsWindow : Window
                 : string.IsNullOrWhiteSpace(theme.BorderColor2) ? new SolidColorBrush(bc)
                 : new LinearGradientBrush(bc, ThemeService.ParseColor(theme.BorderColor2, bc), 0)
         };
-        if (theme.Shadow && theme.ShadowGlow && theme.Margin > 0)
+        if (theme.Shadow && theme.ShadowGlow)
         {
             Color glow = ThemeService.ParseColor(theme.ShadowColor, Colors.Black);
             bar.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(glow.R, glow.G, glow.B), ShadowDepth = 0, BlurRadius = 10, Opacity = 0.9 };

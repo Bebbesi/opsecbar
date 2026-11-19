@@ -71,15 +71,6 @@
     <!-- Trascinamenti accettati su tutta la finestra (anche sul margine di una barra flottante, così in auto-hide
          la barra ricompare): file .gif sulla barra, qualsiasi file sull'icona di un'app. -->
     <Grid x:Name="RootGrid" AllowDrop="True" Drop="Bar_Drop" DragOver="Bar_DragOver">
-        <!-- Ombra esterna (solo barra flottante senza blur) -->
-        <Grid x:Name="ShadowLayer" IsHitTestVisible="False" Visibility="Collapsed">
-            <Border x:Name="ShadowShape" Background="#000000">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0.5" />
-                </Border.Effect>
-            </Border>
-        </Grid>
-
         <Border x:Name="BarBorder" MouseRightButtonUp="Bar_RightUp">
             <!-- Gli elementi della barra. Zona (sinistra / centro / destra) e ordine di ciascuno sono assegnati da codice
                  (ApplyWidgetLayout): disposizione classica oppure quella scelta nel layout avanzato. -->
