@@ -17,9 +17,12 @@ public static class BackdropHelper
     /// </summary>
     private static readonly bool ClassicBlurForRounded = Environment.OSVersion.Version.Build >= 26100;
 
+    /// <summary>True se la lastra sfocata usa Windows.UI.Composition (solo blur, tinta disegnata dalla barra).</summary>
+    public static bool CompositionBackdropAvailable { get; internal set; } = Environment.OSVersion.Version.Build >= 17763;
+
     /// <summary>True se, con questi angoli, Windows non applica la tinta e il colore va disegnato dalla finestra sopra la lastra.</summary>
     public static bool TintDrawnByWindow(BackdropMode mode, bool rounded) =>
-        mode != BackdropMode.Acrylic || (rounded && ClassicBlurForRounded);
+        CompositionBackdropAvailable || mode != BackdropMode.Acrylic || (rounded && ClassicBlurForRounded);
 
     public static bool UsesCompositionBlur(BackdropMode mode) =>
         mode is BackdropMode.Blur or BackdropMode.Acrylic or BackdropMode.Glass;
