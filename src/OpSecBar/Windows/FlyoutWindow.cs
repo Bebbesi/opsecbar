@@ -51,6 +51,7 @@ public class FlyoutWindow : Window
         SourceInitialized += (_, _) => _hwnd = new WindowInteropHelper(this).Handle;
         Deactivated += (_, _) =>
         {
+            if (ClickShield.Debug) ClickShield.Trace($"  [pannello] disattivato, primo piano={ClickShield.Describe(Native.GetForegroundWindow())}");
             // Appena aperto sopra un gioco a schermo intero, la barra che torna in primo piano può togliere per un
             // attimo l'attivazione al pannello: non è l'utente che ha cliccato altrove, ci si riprende il primo piano.
             if (IsVisible && Bar != null && (DateTime.Now - _shownAt).TotalMilliseconds < 500
@@ -64,7 +65,10 @@ public class FlyoutWindow : Window
                 });
                 return;
             }
-            HideFlyout();
+            // Non durante la disattivazione: nascondere qui la finestra mentre Windows passa l'attivazione alla barra
+            // (click su un'icona a menu aperto) annulla il passaggio, e il primo piano finisce alla finestra successiva.
+            // Sopra un gioco a schermo intero è il gioco: la barra torna sotto e il click non arriva più all'icona.
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, HideFlyout);
         };
         // Un pannello alto quanto il contenuto può cambiare altezza mentre è aperto: resta agganciato alla barra.
         SizeChanged += (_, _) =>

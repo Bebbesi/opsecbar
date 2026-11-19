@@ -118,6 +118,12 @@ internal static class Native
         SetForegroundWindow(hWnd);
     }
 
+    public delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x3, WINEVENT_OUTOFCONTEXT = 0x0;
+    /// <summary>Con WINEVENT_OUTOFCONTEXT il callback arriva sul thread che installa l'aggancio (serve un ciclo di messaggi).</summary>
+    [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint thread, uint flags);
+    [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);
+
     [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
     /// <summary>Consente a un altro processo (la prima istanza) di portare le proprie finestre in primo piano.</summary>

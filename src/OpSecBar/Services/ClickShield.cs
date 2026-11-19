@@ -45,13 +45,13 @@ public sealed class ClickShield : IDisposable
     // Diagnostica: con questo file accanto all'exe anche i click simulati (es. controllo remoto) vengono protetti
     // e ogni passaggio finisce in clickshield.log nella stessa cartella.
     private static readonly string DebugFlag = Path.Combine(AppContext.BaseDirectory, "clickshield.debug");
-    private static readonly bool Debug = File.Exists(DebugFlag);
-    private static void Trace(string text)
+    public static readonly bool Debug = File.Exists(DebugFlag);
+    public static void Trace(string text)
     {
         if (!Debug) return;
         try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "clickshield.log"), $"{DateTime.Now:HH:mm:ss.fff} {text}" + Environment.NewLine); } catch { }
     }
-    private static string Describe(IntPtr hwnd)
+    public static string Describe(IntPtr hwnd)
     {
         Native.GetWindowThreadProcessId(hwnd, out uint pid);
         string name = "?";
@@ -64,7 +64,16 @@ public sealed class ClickShield : IDisposable
     {
         _onUi = onUi;
         _proc = Callback;
+        _fgProc = (_, _, hwnd, _, _, _, _) =>
+        {
+            Native.GetCursorPos(out Native.POINT c);
+            Trace($"  primo piano -> {Describe(hwnd)} (cursore {c.X},{c.Y})");
+        };
     }
+
+    private readonly Native.WinEventProc _fgProc; // solo in diagnostica: registra i cambi di primo piano
+    private IntPtr _fgHook;
+    private IntPtr _lastUnder;
 
     public void Install()
     {
@@ -78,8 +87,10 @@ public sealed class ClickShield : IDisposable
                 _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(module?.ModuleName), 0);
             if (_hook == IntPtr.Zero) Log.Warn("Hook del mouse non installato: errore " + Marshal.GetLastWin32Error());
             Trace($"hook installato={_hook != IntPtr.Zero} err={Marshal.GetLastWin32Error()}");
+            if (Debug) _fgHook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _fgProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
             ready.Set();
             while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0) { }
+            if (_fgHook != IntPtr.Zero) Native.UnhookWinEvent(_fgHook);
             if (_hook != IntPtr.Zero) UnhookWindowsHookEx(_hook);
             _hook = IntPtr.Zero;
         }) { IsBackground = true, Name = "ClickShield", Priority = ThreadPriority.AboveNormal };
@@ -102,10 +113,19 @@ public sealed class ClickShield : IDisposable
             if (code >= 0)
             {
                 int message = wParam.ToInt32();
-                if (Debug && message != 0x200) Trace($"msg {message:X}");
                 var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
                 bool real = ((info.flags & LLMHF_INJECTED) == 0 || Debug) && info.dwExtraInfo != Marker;
-                if (real && message == 0x200) { _lastMovePt = info.pt; _lastMoveTick = Environment.TickCount64; }
+                if (real && message == 0x200)
+                {
+                    _lastMovePt = info.pt;
+                    _lastMoveTick = Environment.TickCount64;
+                    if (Debug)
+                    {
+                        IntPtr under = WindowFromPoint(info.pt);
+                        IntPtr root = GetAncestor(under, GA_ROOT);
+                        if (root != _lastUnder) { _lastUnder = root; Trace($"  cursore su {Describe(root)} in {info.pt.X},{info.pt.Y}{((info.flags & LLMHF_INJECTED) != 0 ? " (simulato)" : "")}"); }
+                    }
+                }
                 else if (real && Handle(message, info.pt))
                     return new IntPtr(1); // l'evento originale non arriva a nessuno, nemmeno in raw input
             }

@@ -60,6 +60,8 @@ public partial class App : Application
     private DispatcherTimer? _recreateTimer;
     private WinKeyHook? _winKey;
     private ClickShield? _clickShield;
+    private Native.WinEventProc? _foregroundProc; // tenuto in un campo: il delegate non deve essere raccolto dal GC
+    private IntPtr _foregroundHook;
     private TrayKeeper? _trayKeeper;
     private bool _exiting, _started;
     private readonly long _startedAt = Environment.TickCount64;
@@ -150,7 +152,9 @@ public partial class App : Application
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, StartTray);
             RegisterSignals();
             ApplyWinKey();
-            _clickShield = new ClickShield(a => Dispatcher.BeginInvoke(a)); _clickShield.Install();
+            _clickShield = new ClickShield(a => Dispatcher.BeginInvoke(a));
+            _clickShield.Install();
+            WatchForeground();
             SeedDefaultsOnFirstRun();
             _ = Catalog.GetStartAppsAsync(Settings.StartAppSource);
             if (Settings.ShowQuickSettings && Settings.CustomQuickSettings) QuickSettingsWindow.Preload();
@@ -494,6 +498,23 @@ public partial class App : Application
         foreach (FlyoutWindow flyout in Flyouts) flyout.HideFlyout();
     }
 
+    /// <summary>
+    /// Sopra un gioco a schermo intero la barra resta su finché il primo piano è nostro (menu Start, barra cliccata) e
+    /// torna sotto quando passa a un'altra app. L'elenco delle app a schermo intero non cambia quando si torna al gioco
+    /// dalla barra: senza questo riallineamento la barra resterebbe sopra il gioco.
+    /// </summary>
+    private void WatchForeground()
+    {
+        _foregroundProc = (_, _, _, _, _, _, _) => Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            if (_exiting) return;
+            foreach (TaskbarWindow bar in _bars.ToArray()) bar.SyncFullScreenState();
+        });
+        _foregroundHook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND, IntPtr.Zero,
+            _foregroundProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
+        if (_foregroundHook == IntPtr.Zero) Log.Warn("Aggancio ai cambi di primo piano non installato");
+    }
+
     /// <summary>Installa o rimuove l'intercettazione del tasto Windows in base alle impostazioni.</summary>
     private void ApplyWinKey()
     {
@@ -609,6 +630,7 @@ public partial class App : Application
         try { SettingsService?.SaveNow(); } catch { }
         try { _winKey?.Dispose(); } catch { }
         try { _clickShield?.Dispose(); } catch { }
+        try { if (_foregroundHook != IntPtr.Zero) Native.UnhookWinEvent(_foregroundHook); } catch { }
         try { _trayKeeper?.Dispose(); } catch { }
         try { Native.UnregisterHotKey(IntPtr.Zero, EmergencyHotkeyId); } catch { }
         try { _settingsWindow?.Close(); } catch { }

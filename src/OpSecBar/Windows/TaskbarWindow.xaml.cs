@@ -655,7 +655,7 @@ public partial class TaskbarWindow : AppBarWindow
 
     protected override void OnFullScreenEnter(FullScreenApp app)
     {
-        if (!_s.HideOnFullscreen || _flyoutOpen) return;
+        if (!_s.HideOnFullscreen || KeepAboveFullScreen) return;
         // La classe base prende la prima app dello schermo: se è una da ignorare (streaming VR) si guarda se ce n'è un'altra.
         if (FullScreenFilter.IsIgnored(app))
         {
@@ -663,8 +663,24 @@ public partial class TaskbarWindow : AppBarWindow
             app = other;
         }
         FullScreenFilter.LogEnter(app, Screen.DeviceName);
+        if (ClickShield.Debug) ClickShield.Trace($"  barra {Screen.DeviceName}: si nasconde per {ClickShield.Describe(app.hWnd)}");
         base.OnFullScreenEnter(app);
         UpdateShape();
+    }
+
+    /// <summary>
+    /// La barra resta sopra un gioco a schermo intero finché l'utente la sta usando: con un pannello aperto (menu Start
+    /// dal tasto Windows) o con il primo piano a una nostra finestra (la barra cliccata, un menu). Torna sotto quando il
+    /// primo piano passa a un'altra app: <see cref="App"/> riallinea le barre a ogni cambio di primo piano.
+    /// </summary>
+    private bool KeepAboveFullScreen => _flyoutOpen || OwnsForeground();
+
+    private static bool OwnsForeground()
+    {
+        IntPtr fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero) return false;
+        Native.GetWindowThreadProcessId(fg, out uint pid);
+        return pid == (uint)Environment.ProcessId;
     }
 
     /// <summary>La prima app a schermo intero su questo schermo che deve far cedere il posto alla barra.</summary>
@@ -690,8 +706,7 @@ public partial class TaskbarWindow : AppBarWindow
         if (Handle == IntPtr.Zero || IsClosing) return;
         try
         {
-            // Con un pannello aperto (menu Start dal tasto Windows) la barra resta sopra il gioco finché non si chiude.
-            FullScreenApp? app = _s.HideOnFullscreen && !_flyoutOpen ? FullScreenAppOnThisScreen() : null;
+            FullScreenApp? app = _s.HideOnFullscreen && !KeepAboveFullScreen ? FullScreenAppOnThisScreen() : null;
             if (app != null && Topmost) OnFullScreenEnter(app);
             else if (app == null && !Topmost) OnFullScreenLeave();
         }
@@ -700,6 +715,7 @@ public partial class TaskbarWindow : AppBarWindow
 
     protected override void OnFullScreenLeave()
     {
+        if (ClickShield.Debug) ClickShield.Trace($"  barra {Screen.DeviceName}: torna in primo piano");
         base.OnFullScreenLeave();
         UpdateShape();
     }
@@ -1444,6 +1460,9 @@ public partial class TaskbarWindow : AppBarWindow
         else hover.ClearValue(Border.BackgroundProperty);
     }
 
+    private static string DescribeItem(AppItem? item) => item == null ? "nessuna" :
+        $"{item.Key} finestre=[{string.Join(", ", item.Windows.Select(w => $"{ClickShield.Describe(w.Handle)} '{w.Title}'"))}]";
+
     private void Task_Down(object sender, MouseButtonEventArgs e)
     {
         HidePreview();
@@ -1452,6 +1471,7 @@ public partial class TaskbarWindow : AppBarWindow
         _pressPoint = e.GetPosition(this);
         _pressedWasActive = _pressedItem?.IsActive == true;
         if (TaskListService.DebugEnabled) Log.Info($"[down] item={_pressedItem?.Key} attiva={_pressedWasActive}");
+        if (ClickShield.Debug) ClickShield.Trace($"  [icona giù] {DescribeItem(_pressedItem)} attiva={_pressedWasActive} in {_pressPoint.X:0},{_pressPoint.Y:0}");
         AnimatePress(sender, true);
     }
 
@@ -1481,6 +1501,7 @@ public partial class TaskbarWindow : AppBarWindow
         if (TaskListService.DebugEnabled)
             Log.Info($"[click] item={item?.Key} same={sameItem} finestre={item?.Windows.Count} eraAttiva={_pressedWasActive} " +
                      $"stato={(item?.Windows.Count > 0 ? item.Windows[0].State.ToString() : "-")}");
+        if (ClickShield.Debug) ClickShield.Trace($"  [icona su] {DescribeItem(item)} stessa={sameItem}");
         _pressedItem = null;
         if (!sameItem || item == null) return;
 
