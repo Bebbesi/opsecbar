@@ -106,6 +106,22 @@ public sealed class MediaService : ObservableObject
         Clear();
     }
 
+    /// <summary>
+    /// La sessione è morta (l'app sorgente è stata chiusa o è caduta): il proxy COM risponde con
+    /// InvalidCastException/COMException. Non va più toccato in nessun modo — nemmeno per staccare
+    /// gli eventi, che passa dallo stesso proxy rotto — e si riaggancia la sessione corrente.
+    /// </summary>
+    private void AbandonSession(GlobalSystemMediaTransportControlsSession dead, string where, Exception ex)
+    {
+        if (!ReferenceEquals(_session, dead)) return; // già sostituita
+        Log.Warn($"{where}: sessione multimediale non più valida ({ex.GetType().Name}: {ex.Message}), la abbandono");
+        _session = null;
+        _ui.BeginInvoke(DispatcherPriority.Background, new Action(AttachCurrentSession));
+    }
+
+    private static bool IsDeadProxy(Exception ex) =>
+        ex is InvalidCastException || ex is System.Runtime.InteropServices.COMException || ex is ObjectDisposedException;
+
     private void DetachSession()
     {
         if (_session == null) return;
@@ -132,9 +148,19 @@ public sealed class MediaService : ObservableObject
             return;
         }
 
-        _session.MediaPropertiesChanged += OnMediaPropertiesChanged;
-        _session.PlaybackInfoChanged += OnPlaybackInfoChanged;
-        _session.TimelinePropertiesChanged += OnTimelineChanged;
+        try
+        {
+            _session.MediaPropertiesChanged += OnMediaPropertiesChanged;
+            _session.PlaybackInfoChanged += OnPlaybackInfoChanged;
+            _session.TimelinePropertiesChanged += OnTimelineChanged;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("AttachCurrentSession: sessione non agganciabile: " + ex.Message);
+            _session = null;
+            Clear();
+            return;
+        }
 
         try { SourceAppId = _session.SourceAppUserModelId ?? ""; } catch { SourceAppId = ""; }
         _seekGuardUntil = DateTime.MinValue;
@@ -159,9 +185,9 @@ public sealed class MediaService : ObservableObject
         Repeat = RepeatMode.None;
     }
 
-    private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession s, MediaPropertiesChangedEventArgs e) => _ui.BeginInvoke(RefreshProperties);
-    private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession s, PlaybackInfoChangedEventArgs e) => _ui.BeginInvoke(RefreshPlayback);
-    private void OnTimelineChanged(GlobalSystemMediaTransportControlsSession s, TimelinePropertiesChangedEventArgs e) => _ui.BeginInvoke(RefreshTimeline);
+    private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession s, MediaPropertiesChangedEventArgs e) { if (ReferenceEquals(s, _session)) _ui.BeginInvoke(RefreshProperties); }
+    private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession s, PlaybackInfoChangedEventArgs e) { if (ReferenceEquals(s, _session)) _ui.BeginInvoke(RefreshPlayback); }
+    private void OnTimelineChanged(GlobalSystemMediaTransportControlsSession s, TimelinePropertiesChangedEventArgs e) { if (ReferenceEquals(s, _session)) _ui.BeginInvoke(RefreshTimeline); }
 
     private async void RefreshProperties()
     {
@@ -199,6 +225,7 @@ public sealed class MediaService : ObservableObject
             }
             if (version == _propsVersion) Cover = cover;
         }
+        catch (Exception ex) when (IsDeadProxy(ex)) { AbandonSession(session, "RefreshProperties", ex); }
         catch (Exception ex) { Log.Warn("RefreshProperties: " + ex.Message); }
     }
 
@@ -227,6 +254,7 @@ public sealed class MediaService : ObservableObject
             };
             RefreshTimeline();
         }
+        catch (Exception ex) when (IsDeadProxy(ex)) { AbandonSession(session, "RefreshPlayback", ex); }
         catch (Exception ex) { Log.Warn("RefreshPlayback: " + ex.Message); }
     }
 
@@ -253,6 +281,7 @@ public sealed class MediaService : ObservableObject
             UpdateInterpolatedPosition();
             UpdateTick();
         }
+        catch (Exception ex) when (IsDeadProxy(ex)) { AbandonSession(session, "RefreshTimeline", ex); }
         catch (Exception ex) { Log.Warn("RefreshTimeline: " + ex.Message); }
     }
 

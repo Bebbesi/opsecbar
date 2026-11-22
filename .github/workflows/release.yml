@@ -64,6 +64,16 @@ jobs:
           & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer\OpSecBar.iss
           if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
 
+      - name: Release notes from the tag message
+        shell: pwsh
+        run: |
+          $ref = '${{ github.ref_name }}'
+          git fetch --force origin "refs/tags/${ref}:refs/tags/${ref}"
+          # Annotated tag: its message becomes the release notes; lightweight tag: empty (only the generated notes).
+          $type = git cat-file -t "refs/tags/$ref"
+          $msg = if ($type -eq 'tag') { git tag -l --format='%(contents)' $ref } else { '' }
+          Set-Content -Path release-notes.md -Value $msg -Encoding utf8
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -71,4 +81,5 @@ jobs:
             OpSecBar-Setup.exe
             OpSecBar-win-x64.zip
           prerelease: ${{ steps.version.outputs.prerelease }}
+          body_path: release-notes.md
           generate_release_notes: true
